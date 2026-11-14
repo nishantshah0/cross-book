@@ -286,6 +286,17 @@ More on the threading model, the race handling and the tradeoffs is in [docs/arc
 | `static`         | Configured prices never change, for deterministic experiments. |
 | `finnhub`        | Real provider quotes, fetched server-side. Needs your own key. |
 
+### Simulated time
+
+Set `CLOCK_MODE=simulated` and time stands still at `CLOCK_START` until you advance it:
+
+```bash
+curl -X POST 'http://localhost:8080/api/simulation/ticks?count=40'   # ten minutes of market time, instantly
+curl http://localhost:8080/api/simulation                            # clock, time, ticks taken, feed seed
+```
+
+Each tick moves the clock one feed interval, draws every stock's next price from the seeded walk, then lets each stock's matcher react in turn. Every timestamp the app writes comes from that clock. So a run that starts from the same `FEED_SEED` and places the same orders in the same order produces the same event log, prices, balances and timestamps, down to the database ids. An integration test runs a scripted session twice and compares all of it. On the normal wall clock, the tick endpoint answers 409.
+
 <details>
 <summary><b>Using Finnhub</b></summary>
 <br>
@@ -359,6 +370,8 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | GET    | `/api/events?after=&symbol=&accountId=` | Order event log, by sequence number        |
 | GET    | `/api/events/recent`                    | The latest order events, newest first      |
 | GET    | `/api/ledger`                           | Run the ledger audit; the house's books    |
+| GET    | `/api/simulation`                       | Clock mode, time, ticks taken, feed seed   |
+| POST   | `/api/simulation/ticks?count=`          | Advance a simulated clock by whole ticks   |
 | GET    | `/actuator/health`                      | Health check                               |
 
 <details>

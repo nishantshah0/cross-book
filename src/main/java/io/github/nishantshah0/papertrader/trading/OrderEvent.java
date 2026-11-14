@@ -12,7 +12,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 // One entry in the order event log. Rows are only ever inserted: every field is fixed
-// when the event is written, and nothing updates or deletes them.
+// when the event is written, and nothing updates or deletes them. An event takes its
+// time from the record it describes, so the log and the books always agree on when.
 @Entity
 @Table(name = "order_events")
 public class OrderEvent {
@@ -79,8 +80,8 @@ public class OrderEvent {
     protected OrderEvent() {
     }
 
-    private OrderEvent(Type type, Order order, String reason) {
-        this.occurredAt = Instant.now();
+    private OrderEvent(Type type, Order order, String reason, Instant at) {
+        this.occurredAt = at;
         this.type = type;
         this.orderId = order.getId();
         this.accountId = order.getAccountId();
@@ -94,13 +95,13 @@ public class OrderEvent {
     }
 
     static OrderEvent placed(Order order) {
-        return new OrderEvent(Type.PLACED, order, null);
+        return new OrderEvent(Type.PLACED, order, null, order.getCreatedAt());
     }
 
     // written after the order and trade have both recorded the fill
     static OrderEvent filled(Order order, Trade trade) {
         OrderEvent event = new OrderEvent(order.getStatus() == OrderStatus.FILLED ? Type.FILLED
-                : Type.PARTIALLY_FILLED, order, null);
+                : Type.PARTIALLY_FILLED, order, null, trade.getExecutedAt());
         event.tradeId = trade.getId();
         event.fillQuantity = trade.getQuantity();
         event.fillPrice = trade.getPrice();
@@ -108,18 +109,19 @@ public class OrderEvent {
         return event;
     }
 
+    // written after the order has moved to its final state, which stamps updatedAt
     static OrderEvent cancelled(Order order, String reason) {
-        return new OrderEvent(Type.CANCELLED, order, reason);
+        return new OrderEvent(Type.CANCELLED, order, reason, order.getUpdatedAt());
     }
 
     static OrderEvent rejected(Order order, String reason) {
-        return new OrderEvent(Type.REJECTED, order, reason);
+        return new OrderEvent(Type.REJECTED, order, reason, order.getUpdatedAt());
     }
 
     // an order refused before it was placed, so there is no order row to point at
-    static OrderEvent refused(Long accountId, String symbol, PlaceOrderRequest request, String reason) {
+    static OrderEvent refused(Long accountId, String symbol, PlaceOrderRequest request, String reason, Instant at) {
         OrderEvent event = new OrderEvent();
-        event.occurredAt = Instant.now();
+        event.occurredAt = at;
         event.type = Type.REJECTED;
         event.accountId = accountId;
         event.symbol = symbol;

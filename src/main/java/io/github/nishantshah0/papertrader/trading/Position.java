@@ -40,32 +40,32 @@ public class Position {
     protected Position() {
     }
 
-    public Position(Long accountId, String symbol) {
+    public Position(Long accountId, String symbol, Instant at) {
         this.accountId = accountId;
         this.symbol = symbol;
         this.quantity = 0;
         this.avgCost = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
         this.realizedPnl = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        this.updatedAt = Instant.now();
+        this.updatedAt = at;
     }
 
-    public void buy(int qty, BigDecimal price) {
+    public void buy(int qty, BigDecimal price, Instant at) {
         int newQuantity = quantity + qty;
         BigDecimal costBasis = avgCost.multiply(BigDecimal.valueOf(quantity))
                 .add(price.multiply(BigDecimal.valueOf(qty)));
         avgCost = costBasis.divide(BigDecimal.valueOf(newQuantity), 4, RoundingMode.HALF_UP);
         quantity = newQuantity;
-        updatedAt = Instant.now();
+        updatedAt = at;
     }
 
-    public void sell(int qty, BigDecimal price) {
+    public void sell(int qty, BigDecimal price, Instant at) {
         if (qty > quantity) {
             throw new IllegalArgumentException("cannot sell " + qty + " " + symbol + ", only " + quantity + " held");
         }
         realizedPnl = realizedPnl.add(price.subtract(avgCost).multiply(BigDecimal.valueOf(qty)))
                 .setScale(2, RoundingMode.HALF_UP);
         quantity -= qty;
-        updatedAt = Instant.now();
+        updatedAt = at;
     }
 
     public BigDecimal marketValue(BigDecimal lastPrice) {

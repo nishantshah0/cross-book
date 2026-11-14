@@ -138,6 +138,22 @@ The simple broker has no durable replay. Reconnecting clients reload current RES
 
 There is deliberately no identity/authentication layer. Account IDs select shared practice accounts; they are not credentials. The Compose ports bind to 127.0.0.1. Do not expose this app publicly without authentication, account-level authorization for REST/STOMP, request limits, and a deployment-specific secret configuration.
 
+## Time
+
+Everything that records time reads one injected `java.time.Clock`: orders, trades, positions, the house's books, accounts, events, quotes and the ledger report. Each transaction reads it once and passes that instant down, so every row one order writes carries the same timestamp, and an event's time is taken from the row it describes. There is no static clock to leak between contexts.
+
+`papertrader.clock.mode=system` is the wall clock. `simulated` starts at `papertrader.clock.start` and moves only when `Simulation.tick` advances it, one feed interval at a time. A tick then:
+
+1. asks the feed for every symbol's next price, in symbol order, from the seeded walk;
+2. asks each symbol's matcher, one after another and waiting for each, to fade its lean and fill the resting orders the new quote crosses;
+3. announces the new quotes to browsers.
+
+On the wall clock the feed runs on a schedule and each matcher reacts to quote events on its own thread, so symbols tick in parallel. Under a simulated clock the scheduled refresh does nothing and the engine ignores quote events, because the simulation drives both in a fixed order. Orders placed between ticks already finish on their matcher before the call returns, including the sweep that follows them.
+
+That is what makes a run replayable: from `Simulation.reset(seed)`, which truncates every trading table, restarts identity sequences, clears the books and leans, and puts prices back to their seeds at the start time, the same sequence of calls writes the same rows with the same ids, prices and timestamps. `SimulationReplayTest` runs a scripted session twice and compares the event log, quote history, ledger report and portfolios as JSON; breaking the feed's seeding makes it fail. Reset is a Java call for a simulation runner, not an endpoint. The guarantee assumes one caller at a time: concurrent clients would still race each other, as they would on any exchange.
+
+A simulated clock refuses live quotes, which have their own timestamps.
+
 ## Checks
 
 JUnit/Testcontainers exercises real Postgres migrations and transactional behavior, and audits the ledger and event log after every integration test. The coverage includes concurrent orders, idempotent retries, user-to-user fills across several resting orders and the house, partial fills and cancels, self-trade refusal, and two matcher threads trading between the same accounts at once. The book and engine have unit tests for price-time priority, house priority and when book changes are applied. A scheduled integration test changes a quote and waits for the matcher to fill without another order request. Playwright runs against the packaged app, including two independently subscribed browser tabs, cancellation, server validation, and mobile overflow checks.

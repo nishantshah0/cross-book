@@ -3,6 +3,7 @@ package io.github.nishantshah0.papertrader.web;
 import io.github.nishantshah0.papertrader.NotFoundException;
 import io.github.nishantshah0.papertrader.account.UsernameTakenException;
 import io.github.nishantshah0.papertrader.quote.UnknownSymbolException;
+import io.github.nishantshah0.papertrader.simulation.SimulationOffException;
 import io.github.nishantshah0.papertrader.trading.EngineBusyException;
 import io.github.nishantshah0.papertrader.trading.OrderRejectedException;
 import io.github.nishantshah0.papertrader.trading.OrderStateException;
@@ -25,7 +26,7 @@ class ApiExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
     }
 
-    @ExceptionHandler({OrderStateException.class, UsernameTakenException.class})
+    @ExceptionHandler({OrderStateException.class, UsernameTakenException.class, SimulationOffException.class})
     ProblemDetail conflict(RuntimeException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
     }

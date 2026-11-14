@@ -43,11 +43,11 @@ public class Account {
     protected Account() {
     }
 
-    public Account(User user, BigDecimal startingCash) {
+    public Account(User user, BigDecimal startingCash, Instant at) {
         this.user = user;
         this.startingCash = startingCash.setScale(2, RoundingMode.HALF_UP);
         this.cash = this.startingCash;
-        this.createdAt = Instant.now();
+        this.createdAt = at;
     }
 
     public boolean canAfford(BigDecimal amount) {

@@ -3,6 +3,7 @@ package io.github.nishantshah0.papertrader.quote;
 import io.github.nishantshah0.papertrader.PaperTraderProperties;
 import io.github.nishantshah0.papertrader.trading.OrderRejectedException;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -23,12 +24,29 @@ public class QuoteCache {
     private final Map<String, List<Quote>> history = new ConcurrentHashMap<>();
     private static final int HISTORY_LIMIT = 240;
 
+    private final PaperTraderProperties properties;
     private final String mode;
+    private final Clock clock;
 
     public QuoteCache(PaperTraderProperties properties,
-            @Value("${papertrader.feed.mode:demo}") String mode) {
+            @Value("${papertrader.feed.mode:demo}") String mode, Clock clock) {
+        this.properties = properties;
         this.mode = mode;
-        Instant now = mode.equals("finnhub") ? Instant.EPOCH : Instant.now();
+        this.clock = clock;
+        seed();
+    }
+
+    // back to the configured seed prices, stamped now, with the history cleared: how a
+    // simulation starts a fresh run
+    public void reset() {
+        quotes.clear();
+        history.clear();
+        seed();
+    }
+
+    private void seed() {
+        // live seeds are stamped at the epoch, so they never count as fresh
+        Instant now = mode.equals("finnhub") ? Instant.EPOCH : clock.instant();
         properties.seedQuotes().forEach((symbol, price) -> {
             String key = symbol.toUpperCase(Locale.ROOT);
             Quote seed = new Quote(key, price, now);
@@ -48,7 +66,7 @@ public class QuoteCache {
     public void update(Quote quote) {
         boolean badPrice = quote.price() == null || quote.price().signum() <= 0
                 || quote.price().compareTo(new BigDecimal("9999999999")) > 0;
-        boolean badTime = quote.asOf() == null || quote.asOf().isAfter(Instant.now().plusSeconds(30));
+        boolean badTime = quote.asOf() == null || quote.asOf().isAfter(clock.instant().plusSeconds(30));
         if (badPrice || badTime) {
             throw new IllegalArgumentException("invalid quote");
         }
@@ -72,7 +90,7 @@ public class QuoteCache {
     }
 
     public boolean isTradable(Quote quote) {
-        return !mode.equals("finnhub") || quote.asOf().isAfter(Instant.now().minusSeconds(120));
+        return !mode.equals("finnhub") || quote.asOf().isAfter(clock.instant().minusSeconds(120));
     }
 
     public void requireTradable(Quote quote) {

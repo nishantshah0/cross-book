@@ -16,6 +16,7 @@ import io.github.nishantshah0.papertrader.trading.OrderExecution.BookChange;
 import io.github.nishantshah0.papertrader.trading.OrderExecution.BookOutOfSyncException;
 import io.github.nishantshah0.papertrader.trading.OrderExecution.Result;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -45,7 +46,7 @@ class MatchingEngineTest {
                 .thenReturn(List.of(bid90, bid80));
         when(quotes.symbols()).thenReturn(Set.of("AAPL"));
         when(quotes.get("AAPL")).thenReturn(Optional.empty());
-        engine = new MatchingEngine(repository, execution, quotes, PriceImpact.none(), 0);
+        engine = new MatchingEngine(repository, execution, quotes, PriceImpact.none(), 0, Clock.systemUTC());
         engine.rebuild();
         // rebuild runs on the matcher thread; wait for it, so no test stubs a mock while
         // that thread may still be calling it
@@ -141,7 +142,7 @@ class MatchingEngineTest {
     }
 
     private static Order limit(Long id, Long accountId, String price) {
-        Order order = Order.limit(accountId, "AAPL", OrderSide.BUY, 1, new BigDecimal(price));
+        Order order = Order.limit(accountId, "AAPL", OrderSide.BUY, 1, new BigDecimal(price), Instant.EPOCH);
         ReflectionTestUtils.setField(order, "id", id);
         return order;
     }

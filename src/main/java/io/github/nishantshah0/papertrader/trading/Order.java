@@ -62,7 +62,8 @@ public class Order {
     protected Order() {
     }
 
-    private Order(Long accountId, String symbol, OrderSide side, OrderType type, int quantity, BigDecimal limitPrice) {
+    private Order(Long accountId, String symbol, OrderSide side, OrderType type, int quantity, BigDecimal limitPrice,
+            Instant at) {
         this.accountId = accountId;
         this.symbol = symbol;
         this.side = side;
@@ -70,16 +71,17 @@ public class Order {
         this.quantity = quantity;
         this.limitPrice = limitPrice;
         this.status = OrderStatus.OPEN;
-        this.createdAt = Instant.now();
-        this.updatedAt = createdAt;
+        this.createdAt = at;
+        this.updatedAt = at;
     }
 
-    public static Order market(Long accountId, String symbol, OrderSide side, int quantity) {
-        return new Order(accountId, symbol, side, OrderType.MARKET, quantity, null);
+    public static Order market(Long accountId, String symbol, OrderSide side, int quantity, Instant at) {
+        return new Order(accountId, symbol, side, OrderType.MARKET, quantity, null, at);
     }
 
-    public static Order limit(Long accountId, String symbol, OrderSide side, int quantity, BigDecimal price) {
-        return new Order(accountId, symbol, side, OrderType.LIMIT, quantity, price);
+    public static Order limit(Long accountId, String symbol, OrderSide side, int quantity, BigDecimal price,
+            Instant at) {
+        return new Order(accountId, symbol, side, OrderType.LIMIT, quantity, price, at);
     }
 
     public boolean crosses(BigDecimal price) {
@@ -87,8 +89,8 @@ public class Order {
                 ? price.compareTo(limitPrice) <= 0 : price.compareTo(limitPrice) >= 0);
     }
 
-    public void reject() {
-        transition(OrderStatus.REJECTED);
+    public void reject(Instant at) {
+        transition(OrderStatus.REJECTED, at);
     }
 
     public boolean isOpen() {
@@ -101,7 +103,7 @@ public class Order {
 
     // one execution of part or all of what is left. the order stays OPEN until nothing
     // remains, and the average price is weighted by the shares in each fill
-    public void fill(int shares, BigDecimal price) {
+    public void fill(int shares, BigDecimal price, Instant at) {
         if (!isOpen() || shares <= 0 || shares > remainingQuantity()) {
             throw new IllegalStateException("order " + id + " cannot fill " + shares + " of "
                     + remainingQuantity() + " remaining (" + status + ")");
@@ -112,22 +114,22 @@ public class Order {
         avgFillPrice = filledValue.add(price.multiply(BigDecimal.valueOf(shares)))
                 .divide(BigDecimal.valueOf(filledQuantity), 4, RoundingMode.HALF_UP);
         if (filledQuantity == quantity) {
-            transition(OrderStatus.FILLED);
+            transition(OrderStatus.FILLED, at);
         } else {
-            updatedAt = Instant.now();
+            updatedAt = at;
         }
     }
 
-    public void cancel() {
-        transition(OrderStatus.CANCELLED);
+    public void cancel(Instant at) {
+        transition(OrderStatus.CANCELLED, at);
     }
 
-    private void transition(OrderStatus next) {
+    private void transition(OrderStatus next, Instant at) {
         if (!isOpen()) {
             throw new IllegalStateException("order " + id + " is " + status + ", cannot move to " + next);
         }
         status = next;
-        updatedAt = Instant.now();
+        updatedAt = at;
     }
 
     public void setIdempotencyKey(String key) { this.idempotencyKey = key; }

@@ -1,11 +1,15 @@
 package io.github.nishantshah0.papertrader.quote;
 
 import io.github.nishantshah0.papertrader.PaperTraderProperties;
+import io.github.nishantshah0.papertrader.time.SimulationClock;
 import java.math.BigDecimal;
 import java.net.http.HttpClient;
 import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -28,17 +32,19 @@ public class MarketDataFeed {
     private final ApplicationEventPublisher events;
     private final String apiKey;
     private final RestClient client;
-    private final DemoWalk walk;
+    private final Clock clock;
+    private volatile DemoWalk walk;
+    private volatile long seed;
 
     // seed fixes the demo feed's random walk, so a run can be replayed with the same
     // prices. Left blank, the feed picks one and logs it, so any run can be replayed.
     MarketDataFeed(QuoteCache quotes, PaperTraderProperties properties, ApplicationEventPublisher events,
             @Value("${papertrader.feed.api-key:}") String apiKey,
-            @Value("${papertrader.feed.seed:}") String seed) {
-        long chosen = seed == null || seed.isBlank() ? new SecureRandom().nextLong() : parseSeed(seed);
-        this.walk = new DemoWalk(new Random(chosen));
+            @Value("${papertrader.feed.seed:}") String seed, Clock clock) {
+        this.clock = clock;
+        reseed(seed == null || seed.isBlank() ? new SecureRandom().nextLong() : parseSeed(seed));
         if (quotes.mode().equals("demo")) {
-            log.info("Demo feed seed {} (set FEED_SEED to replay these prices)", chosen);
+            log.info("Demo feed seed {} (set FEED_SEED to replay these prices)", this.seed);
         }
         this.quotes = quotes;
         this.properties = properties;
@@ -56,12 +62,24 @@ public class MarketDataFeed {
         client = RestClient.builder().baseUrl("https://finnhub.io/api/v1").requestFactory(factory).build();
     }
 
+    // On the wall clock, the feed refreshes on a schedule and announces each new quote.
+    // Under a simulated clock the simulation calls refresh() itself, once per tick.
     @Scheduled(fixedDelayString = "${papertrader.feed.interval-ms:15000}",
             initialDelayString = "${papertrader.feed.initial-delay-ms:3000}")
     public void poll() {
-        if (quotes.mode().equals("static")) {
+        if (SimulationClock.isSimulated(clock)) {
             return;
         }
+        refresh().forEach(events::publishEvent);
+    }
+
+    // Fetches the next quote for every symbol, in symbol order, and stores it. Returns
+    // the quotes that changed; announcing them is the caller's job.
+    public List<Quote> refresh() {
+        if (quotes.mode().equals("static")) {
+            return List.of();
+        }
+        List<Quote> updated = new ArrayList<>();
         for (String symbol : quotes.symbols().stream().sorted().toList()) {
             try {
                 Quote quote = quotes.mode().equals("demo") ? demoQuote(symbol) : finnhubQuote(symbol);
@@ -69,13 +87,24 @@ public class MarketDataFeed {
                     continue;
                 }
                 quotes.update(quote);
-                events.publishEvent(quotes.require(symbol));
+                updated.add(quotes.require(symbol));
             } catch (RuntimeException e) {
                 // never log provider response bodies or credentials. the last quote stays,
                 // and execution refuses stale prices rather than falling back to seed prices
                 log.warn("Quote refresh failed for {} ({})", symbol, e.getClass().getSimpleName());
             }
         }
+        return updated;
+    }
+
+    // starts the demo walk again from this seed and from every symbol's seed price
+    public void reseed(long seed) {
+        this.seed = seed;
+        this.walk = new DemoWalk(new Random(seed));
+    }
+
+    public long seed() {
+        return seed;
     }
 
     private static long parseSeed(String seed) {
@@ -87,7 +116,7 @@ public class MarketDataFeed {
     }
 
     private Quote demoQuote(String symbol) {
-        return new Quote(symbol, walk.next(symbol, properties.seedQuotes().get(symbol)), Instant.now());
+        return new Quote(symbol, walk.next(symbol, properties.seedQuotes().get(symbol)), clock.instant());
     }
 
     private Quote finnhubQuote(String symbol) {

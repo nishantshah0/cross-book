@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -35,10 +35,12 @@ public class LedgerAudit {
 
     private final JdbcTemplate jdbc;
     private final QuoteCache quotes;
+    private final Clock clock;
 
-    LedgerAudit(JdbcTemplate jdbc, QuoteCache quotes) {
+    LedgerAudit(JdbcTemplate jdbc, QuoteCache quotes, Clock clock) {
         this.jdbc = jdbc;
         this.quotes = quotes;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -189,7 +191,7 @@ public class LedgerAudit {
 
         boolean truncated = violations.size() > MAX_VIOLATIONS;
         List<Violation> reported = truncated ? List.copyOf(violations.subList(0, MAX_VIOLATIONS)) : violations;
-        return new LedgerReport(violations.isEmpty(), Instant.now(), totals, house(), reported, truncated);
+        return new LedgerReport(violations.isEmpty(), clock.instant(), totals, house(), reported, truncated);
     }
 
     private Totals totals() {

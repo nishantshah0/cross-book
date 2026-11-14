@@ -1,14 +1,16 @@
 package io.github.nishantshah0.papertrader.quote;
 import static org.assertj.core.api.Assertions.*;
+
 import io.github.nishantshah0.papertrader.PaperTraderProperties;
 import io.github.nishantshah0.papertrader.trading.OrderRejectedException;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class QuoteCacheTest {
-    private QuoteCache cache(String mode) { return new QuoteCache(new PaperTraderProperties(new BigDecimal("1000"), Map.of("AAPL",new BigDecimal("100"))),mode); }
+    private QuoteCache cache(String mode) { return new QuoteCache(new PaperTraderProperties(new BigDecimal("1000"), Map.of("AAPL",new BigDecimal("100"))),mode, Clock.systemUTC()); }
     @Test void historyIsBoundedOrderedAndCannotBeMutated() {
         var cache = cache("finnhub");
         assertThat(cache.history().get("AAPL")).isEmpty();

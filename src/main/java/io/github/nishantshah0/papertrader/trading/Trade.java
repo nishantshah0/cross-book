@@ -49,14 +49,14 @@ public class Trade {
     protected Trade() {
     }
 
-    public Trade(Order order, int quantity, BigDecimal price, Long counterpartyOrderId) {
+    public Trade(Order order, int quantity, BigDecimal price, Long counterpartyOrderId, Instant at) {
         this.orderId = order.getId();
         this.accountId = order.getAccountId();
         this.symbol = order.getSymbol();
         this.side = order.getSide();
         this.quantity = quantity;
         this.price = price.setScale(4, RoundingMode.HALF_UP);
-        this.executedAt = Instant.now();
+        this.executedAt = at;
         this.counterpartyOrderId = counterpartyOrderId;
     }
 

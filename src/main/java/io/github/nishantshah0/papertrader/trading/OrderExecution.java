@@ -6,6 +6,8 @@ import io.github.nishantshah0.papertrader.account.AccountRepository;
 import io.github.nishantshah0.papertrader.trading.OrderBook.PlannedFill;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -57,11 +59,12 @@ class OrderExecution {
     private final HousePositionRepository house;
     private final OrderEventRepository eventLog;
     private final PriceImpact impact;
+    private final Clock clock;
     private final ApplicationEventPublisher events;
 
     OrderExecution(AccountRepository accounts, OrderRepository orders, TradeRepository trades,
             PositionRepository positions, HousePositionRepository house, OrderEventRepository eventLog,
-            PriceImpact impact, ApplicationEventPublisher events) {
+            PriceImpact impact, Clock clock, ApplicationEventPublisher events) {
         this.accounts = accounts;
         this.orders = orders;
         this.trades = trades;
@@ -69,6 +72,7 @@ class OrderExecution {
         this.house = house;
         this.eventLog = eventLog;
         this.impact = impact;
+        this.clock = clock;
         this.events = events;
     }
 
@@ -94,6 +98,8 @@ class OrderExecution {
                 return new Result(previous.get(), List.of());
             }
         }
+        // one instant for everything this transaction records
+        Instant now = clock.instant();
         OrderType type = request.typeOrMarket();
         if ((type == OrderType.LIMIT) != (request.limitPrice() != null)) {
             throw new OrderRejectedException("limit orders require limitPrice; market orders must omit it");
@@ -111,8 +117,8 @@ class OrderExecution {
         Account account = locked.get(accountId);
 
         Order order = type == OrderType.LIMIT
-                ? Order.limit(accountId, symbol, request.side(), request.quantity(), request.limitPrice())
-                : Order.market(accountId, symbol, request.side(), request.quantity());
+                ? Order.limit(accountId, symbol, request.side(), request.quantity(), request.limitPrice(), now)
+                : Order.market(accountId, symbol, request.side(), request.quantity(), now);
         // a market buy pays at most the house's price for its whole size, so that bounds
         // what it can cost
         BigDecimal worstPrice = type == OrderType.LIMIT ? order.getLimitPrice()
@@ -131,15 +137,15 @@ class OrderExecution {
             Account makerAccount = locked.get(maker.getAccountId());
             if (!canSettle(makerAccount, maker, fill.quantity(), fill.price())) {
                 // only possible for an order placed before reservations existed
-                maker.reject();
+                maker.reject(now);
                 eventLog.save(OrderEvent.rejected(maker, "could not pay for a fill of " + fill.quantity()
                         + " at " + fill.price()));
                 changes.add(new BookChange.Remove(maker.getId()));
                 publish(maker);
                 continue;
             }
-            settle(account, order, fill.quantity(), fill.price(), maker.getId());
-            settle(makerAccount, maker, fill.quantity(), fill.price(), order.getId());
+            settle(account, order, fill.quantity(), fill.price(), maker.getId(), now);
+            settle(makerAccount, maker, fill.quantity(), fill.price(), order.getId(), now);
             changes.add(new BookChange.Reduce(maker.getId(), fill.quantity()));
             publish(maker);
         }
@@ -148,14 +154,14 @@ class OrderExecution {
         if (order.isOpen() && house != null) {
             int shares = impact.fillable(house, order.getSide(), order.getLimitPrice(), order.remainingQuantity());
             if (shares > 0) {
-                settle(account, order, shares, impact.fillPrice(house, order.getSide(), shares), null);
+                settle(account, order, shares, impact.fillPrice(house, order.getSide(), shares), null, now);
             }
         }
         if (order.isOpen()) {
             if (type == OrderType.LIMIT) {
                 changes.add(new BookChange.Rest(RestingOrder.of(order)));
             } else {
-                order.cancel(); // nothing left to trade with; the filled part stands
+                order.cancel(now); // nothing left to trade with; the filled part stands
                 eventLog.save(OrderEvent.cancelled(order, "market order: nothing left to trade with"));
             }
         }
@@ -168,7 +174,7 @@ class OrderExecution {
     @Transactional
     public void recordRefusal(Long accountId, String symbol, PlaceOrderRequest request, String reason) {
         if (accounts.existsById(accountId)) {
-            eventLog.save(OrderEvent.refused(accountId, symbol, request, reason));
+            eventLog.save(OrderEvent.refused(accountId, symbol, request, reason, clock.instant()));
         }
     }
 
@@ -176,6 +182,7 @@ class OrderExecution {
     // resting, so the house came to it, and it pays nothing for size.
     @Transactional
     public Result fillAgainstHouse(RestingOrder resting, HouseQuote house) {
+        Instant now = clock.instant();
         long orderId = resting.id();
         Account account = accounts.findByIdForUpdate(resting.accountId()).orElseThrow();
         Order order = orders.findById(orderId)
@@ -188,11 +195,11 @@ class OrderExecution {
             return new Result(order, List.of());
         }
         if (!canSettle(account, order, order.remainingQuantity(), price)) {
-            order.reject();
+            order.reject(now);
             eventLog.save(OrderEvent.rejected(order, "could not pay for a fill of " + order.remainingQuantity()
                     + " at " + price));
         } else {
-            settle(account, order, order.remainingQuantity(), price, null);
+            settle(account, order, order.remainingQuantity(), price, null, now);
         }
         publish(order);
         return new Result(order, List.of(new BookChange.Remove(orderId)));
@@ -208,7 +215,7 @@ class OrderExecution {
             throw new OrderStateException("order " + orderId + " is " + order.getStatus()
                     + ", only OPEN orders can be cancelled");
         }
-        order.cancel();
+        order.cancel(clock.instant());
         eventLog.save(OrderEvent.cancelled(order, "cancelled by the account"));
         publish(order);
         return new Result(order, List.of(new BookChange.Remove(orderId)));
@@ -258,33 +265,34 @@ class OrderExecution {
     // One side of one fill: cash, position, order and trade row move together. With no
     // counterparty order the house is the other side, and its books move in the same
     // transaction, so every dollar and share a user gains, the house gives up.
-    private void settle(Account account, Order order, int shares, BigDecimal price, Long counterpartyOrderId) {
+    private void settle(Account account, Order order, int shares, BigDecimal price, Long counterpartyOrderId,
+            Instant now) {
         BigDecimal notional = notional(price, shares);
         Position position = positions.findByAccountIdAndSymbol(account.getId(), order.getSymbol())
-                .orElseGet(() -> new Position(account.getId(), order.getSymbol()));
+                .orElseGet(() -> new Position(account.getId(), order.getSymbol(), now));
         if (order.getSide() == OrderSide.BUY) {
             if (!account.canAfford(notional)) {
                 throw new OrderRejectedException("insufficient cash: fill costs " + notional
                         + ", account has " + account.getCash());
             }
             account.debit(notional);
-            position.buy(shares, price);
+            position.buy(shares, price, now);
         } else {
             if (position.getQuantity() < shares) {
                 throw new OrderRejectedException("insufficient shares: fill sells " + shares + " "
                         + order.getSymbol() + ", account holds " + position.getQuantity());
             }
-            position.sell(shares, price);
+            position.sell(shares, price, now);
             account.credit(notional);
         }
-        order.fill(shares, price);
+        order.fill(shares, price, now);
         positions.save(position);
-        Trade trade = trades.save(new Trade(order, shares, price, counterpartyOrderId));
+        Trade trade = trades.save(new Trade(order, shares, price, counterpartyOrderId, now));
         eventLog.save(OrderEvent.filled(order, trade));
         if (counterpartyOrderId == null) {
             HousePosition books = house.findById(order.getSymbol())
-                    .orElseGet(() -> new HousePosition(order.getSymbol()));
-            books.takeOtherSide(order.getSide(), shares, notional);
+                    .orElseGet(() -> new HousePosition(order.getSymbol(), now));
+            books.takeOtherSide(order.getSide(), shares, notional, now);
             house.save(books);
         }
     }

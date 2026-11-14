@@ -6,8 +6,10 @@ import io.github.nishantshah0.papertrader.trading.OrderBook.Level;
 import io.github.nishantshah0.papertrader.trading.OrderExecution.BookChange;
 import io.github.nishantshah0.papertrader.trading.OrderExecution.BookOutOfSyncException;
 import io.github.nishantshah0.papertrader.trading.OrderExecution.Result;
+import io.github.nishantshah0.papertrader.time.SimulationClock;
 import jakarta.annotation.PreDestroy;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
@@ -47,14 +49,18 @@ public class MatchingEngine {
     private final QuoteCache quotes;
     private final PriceImpact impact;
     private final int spreadBps;
+    // under a simulated clock, quote ticks are driven by the simulation in symbol order,
+    // so the engine ignores the quote events it would otherwise react to on its own
+    private final boolean simulated;
 
     MatchingEngine(OrderRepository orders, OrderExecution execution, QuoteCache quotes, PriceImpact impact,
-            @Value("${papertrader.house.spread-bps:10}") int spreadBps) {
+            @Value("${papertrader.house.spread-bps:10}") int spreadBps, Clock clock) {
         this.orders = orders;
         this.execution = execution;
         this.quotes = quotes;
         this.impact = impact;
         this.spreadBps = spreadBps;
+        this.simulated = SimulationClock.isSimulated(clock);
         HouseQuote.around(BigDecimal.ONE, spreadBps); // fail at startup on a bad spread
     }
 
@@ -147,12 +153,42 @@ public class MatchingEngine {
     // fill for one symbol never holds up quotes for the others.
     @EventListener
     public void onQuote(Quote quote) {
+        if (simulated) {
+            return;
+        }
         submit(quote.symbol(), () -> {
-            Matcher matcher = matcher(quote.symbol());
-            matcher.pressureBps = impact.decayed(matcher.pressureBps);
-            sweep(quote.symbol());
+            tickOnMatcher(quote.symbol());
             return null;
         });
+    }
+
+    // One quote tick for a symbol, and waits for it: the lean fades and the house fills
+    // any resting orders its new quote crosses. A simulation calls this for every symbol,
+    // in order, so ticks never overlap and a replay does exactly the same work.
+    public void tick(String symbol) {
+        call(symbol, () -> {
+            tickOnMatcher(symbol);
+            return null;
+        });
+    }
+
+    private void tickOnMatcher(String symbol) {
+        Matcher matcher = matcher(symbol);
+        matcher.pressureBps = impact.decayed(matcher.pressureBps);
+        sweep(symbol);
+    }
+
+    // Empties every book and settles every lean, for a simulation that has just cleared
+    // the database. Each matcher does its own, so no order is half way through.
+    public void reset() {
+        for (String symbol : matchers.keySet()) {
+            call(symbol, () -> {
+                Matcher matcher = matcher(symbol);
+                matcher.book.clear();
+                matcher.pressureBps = 0;
+                return null;
+            });
+        }
     }
 
     public BookView book(String symbol, int levels) {

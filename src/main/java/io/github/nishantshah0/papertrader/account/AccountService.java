@@ -2,6 +2,8 @@ package io.github.nishantshah0.papertrader.account;
 
 import io.github.nishantshah0.papertrader.NotFoundException;
 import io.github.nishantshah0.papertrader.PaperTraderProperties;
+import java.time.Clock;
+import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,11 +13,13 @@ public class AccountService {
     private final UserRepository users;
     private final AccountRepository accounts;
     private final PaperTraderProperties properties;
+    private final Clock clock;
 
-    AccountService(UserRepository users, AccountRepository accounts, PaperTraderProperties properties) {
+    AccountService(UserRepository users, AccountRepository accounts, PaperTraderProperties properties, Clock clock) {
         this.users = users;
         this.accounts = accounts;
         this.properties = properties;
+        this.clock = clock;
     }
 
     @Transactional
@@ -23,8 +27,9 @@ public class AccountService {
         if (users.existsByUsername(username)) {
             throw new UsernameTakenException(username);
         }
-        User user = users.save(new User(username));
-        return accounts.save(new Account(user, properties.startingCash()));
+        Instant now = clock.instant();
+        User user = users.save(new User(username, now));
+        return accounts.save(new Account(user, properties.startingCash(), now));
     }
 
     @Transactional(readOnly = true)

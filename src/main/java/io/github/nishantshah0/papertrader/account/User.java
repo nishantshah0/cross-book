@@ -25,9 +25,9 @@ public class User {
     protected User() {
     }
 
-    public User(String username) {
+    public User(String username, Instant at) {
         this.username = username;
-        this.createdAt = Instant.now();
+        this.createdAt = at;
     }
 
     public Long getId() {

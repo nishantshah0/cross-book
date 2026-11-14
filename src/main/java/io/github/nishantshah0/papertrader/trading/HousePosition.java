@@ -31,15 +31,15 @@ public class HousePosition {
     protected HousePosition() {
     }
 
-    HousePosition(String symbol) {
+    HousePosition(String symbol, Instant at) {
         this.symbol = symbol;
         this.quantity = 0;
         this.cash = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        this.updatedAt = Instant.now();
+        this.updatedAt = at;
     }
 
     // the house takes the opposite side of a user's fill: it sells what a user buys
-    void takeOtherSide(OrderSide userSide, int shares, BigDecimal notional) {
+    void takeOtherSide(OrderSide userSide, int shares, BigDecimal notional, Instant at) {
         if (userSide == OrderSide.BUY) {
             quantity -= shares;
             cash = cash.add(notional);
@@ -47,7 +47,7 @@ public class HousePosition {
             quantity += shares;
             cash = cash.subtract(notional);
         }
-        updatedAt = Instant.now();
+        updatedAt = at;
     }
 
     public String getSymbol() {

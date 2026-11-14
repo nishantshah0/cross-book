@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.nishantshah0.papertrader.PaperTraderProperties;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -34,14 +35,14 @@ class MarketDataFeedTest {
 
     @Test
     void refusesASeedThatIsNotANumber() {
-        assertThatThrownBy(() -> feed(new QuoteCache(PROPERTIES, "demo"), "forty-two"))
+        assertThatThrownBy(() -> feed(new QuoteCache(PROPERTIES, "demo", Clock.systemUTC()), "forty-two"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("whole number");
     }
 
     // every symbol's price after each of `ticks` polls
     private static List<String> prices(String seed, int ticks) {
-        QuoteCache quotes = new QuoteCache(PROPERTIES, "demo");
+        QuoteCache quotes = new QuoteCache(PROPERTIES, "demo", Clock.systemUTC());
         MarketDataFeed feed = feed(quotes, seed);
         List<String> seen = new ArrayList<>();
         for (int i = 0; i < ticks; i++) {
@@ -52,6 +53,6 @@ class MarketDataFeedTest {
     }
 
     private static MarketDataFeed feed(QuoteCache quotes, String seed) {
-        return new MarketDataFeed(quotes, PROPERTIES, event -> { }, "", seed);
+        return new MarketDataFeed(quotes, PROPERTIES, event -> { }, "", seed, Clock.systemUTC());
     }
 }

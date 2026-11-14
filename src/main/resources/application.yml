@@ -43,6 +43,11 @@ papertrader:
     depth-shares: ${HOUSE_DEPTH_SHARES:500}
     impact-decay: ${HOUSE_IMPACT_DECAY:0.25}
     imbalance-bps: ${HOUSE_IMBALANCE_BPS:4}
+  # system runs on the wall clock. simulated starts at clock.start and only moves when
+  # POST /api/simulation/ticks advances it, so runs are fast and replay exactly
+  clock:
+    mode: ${CLOCK_MODE:system}
+    start: ${CLOCK_START:2026-01-05T14:30:00Z}
   starting-cash: 100000.00
   # Demo reference prices; live mode will not execute against these seeds
   seed-quotes:
