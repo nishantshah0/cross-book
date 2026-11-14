@@ -108,7 +108,7 @@ The browser retains a failed request's key until that payload changes or succeed
 
 ## Feed modes and failures
 
-- Demo: deterministic bounded price oscillations around configured seed prices, every 15 seconds. Clearly labeled simulated prices.
+- Demo: a random walk every 15 seconds, pulled gently back towards each symbol's configured seed price and kept within 6% of it. Clearly labeled simulated prices.
 - Static: unchanged configured prices, used by integration tests.
 - Finnhub: server-side HTTP requests with five-second connection/read timeouts. Seeds have an epoch timestamp and are never executable. Invalid, future-dated, or out-of-order quotes cannot replace good data. While a quote is older than 120 seconds the house is out: market orders are refused, and limit orders rest until a fresh quote crosses them. Users can still trade with each other.
 
@@ -132,4 +132,4 @@ JUnit/Testcontainers exercises real Postgres migrations and transactional behavi
 
 The root route serves the product home page. The trading workspace lives at `/terminal`; `/terminal/` is also supported. The backend forwards only these explicit terminal routes to the bundled index, so direct navigation and refresh work without swallowing unknown API or asset routes. The terminal logo returns home. Instrument links pass a validated symbol query parameter, and the saved practice account remains in local storage across navigation.
 
-The home page uses a dark charcoal layout with blue accents with live cache snapshots in a semantic market table. Account-opening links use `/terminal?setup=1`; successful account selection clears that parameter so refreshes resume the selected account instead of reopening setup.
+The home page and the terminal share one set of design tokens and self-hosted fonts, so nothing is fetched from a third party. The home page's demo is a working order ticket: its first order opens a guest practice account, saved in the browser so the terminal picks it up, and it shows the events that order created by reading the event log for that account. The live event list and ledger figures on the page come from `/api/events/recent` and `/api/ledger`. Account-opening links use `/terminal?setup=1`; successful account selection clears that parameter so refreshes resume the selected account instead of reopening setup.

@@ -31,4 +31,11 @@ class OrderEventController {
         String key = symbol == null ? null : symbol.toUpperCase(Locale.ROOT);
         return events.after(after, key, accountId, Limit.of(limit)).stream().map(OrderEventResponse::from).toList();
     }
+
+    // the latest events, newest first: what a live tape shows
+    @GetMapping("/api/events/recent")
+    @Transactional(readOnly = true)
+    List<OrderEventResponse> recent(@RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
+        return events.findAllByOrderBySeqDesc(Limit.of(limit)).stream().map(OrderEventResponse::from).toList();
+    }
 }

@@ -6,7 +6,7 @@ test("home page introduces the product and launches the working terminal", async
 }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /Practice trading/ }),
+    page.getByRole("heading", { name: /Paper trading on a real order book/ }),
   ).toBeVisible();
   await page
     .getByRole("link", { name: "Explore the terminal", exact: true })
@@ -24,7 +24,7 @@ test("home page introduces the product and launches the working terminal", async
     .click();
   await expect(page).toHaveURL(/\/$/);
   await expect(
-    page.getByRole("heading", { name: /Practice trading/ }),
+    page.getByRole("heading", { name: /Paper trading on a real order book/ }),
   ).toBeVisible();
   const trailingSlash = await request.get("/terminal/");
   expect(trailingSlash.status()).toBe(200);
@@ -79,10 +79,10 @@ test("home layout renders at desktop and mobile widths", async ({ page }) => {
   await expect(
     page.locator(".broker-market-table tbody tr").first(),
   ).toContainText("$");
-  await expect(page.locator(".terminal-preview img")).toHaveJSProperty(
-    "complete",
-    true,
-  );
+  // the demo's order book shows the house quote from the running engine
+  await expect(
+    page.getByLabel("AAPL order book").getByText("house").first(),
+  ).toBeVisible();
   await page.screenshot({
     path: "test-results/home-desktop.png",
     fullPage: false,
@@ -123,4 +123,45 @@ test("home account-opening flow creates an account and survives refresh", async 
   await page.reload();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await expect(page.getByText(/Account #/)).toBeVisible();
+});
+
+test("the home page demo places a real order and shows what it did", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const demo = page.getByRole("region", { name: "Live demo" });
+  await demo.getByRole("button", { name: "MSFT", exact: true }).click();
+  await expect(demo.getByLabel("MSFT order book")).toContainText("house");
+  await demo.getByLabel("Shares").fill("2");
+  await demo.getByRole("button", { name: "Buy 2 MSFT", exact: true }).click();
+
+  const receipt = demo.getByRole("list", { name: "What your order did" });
+  await expect(receipt).toContainText("Placed");
+  await expect(receipt).toContainText("Filled");
+  await expect(receipt).toContainText("buy 2 MSFT @");
+  await expect(demo).toContainText(/Account #\d+ · \$[\d,.]+ cash · 2 MSFT/);
+
+  // the same order is on the public record, and the books still balance
+  await expect(
+    page.getByRole("list", { name: "Latest order events" }),
+  ).toContainText("buy 2 MSFT @");
+  await expect(page.locator(".facts dd").first()).toHaveText("Balanced");
+
+  // the guest account carries over to the terminal
+  await demo.getByRole("link", { name: /See it in the terminal/ }).click();
+  await expect(page).toHaveURL(/\/terminal$/);
+  await expect(page.getByText(/Account #/)).toBeVisible();
+  await expect(
+    page
+      .locator("section.positions")
+      .getByRole("button", { name: "MSFT", exact: true }),
+  ).toBeVisible();
+});
+
+test("a refused demo order shows the reason", async ({ page }) => {
+  await page.goto("/");
+  const demo = page.getByRole("region", { name: "Live demo" });
+  await demo.getByRole("button", { name: "Sell", exact: true }).click();
+  await demo.getByRole("button", { name: "Sell 5 AAPL", exact: true }).click();
+  await expect(demo.getByRole("alert")).toContainText("insufficient shares");
 });

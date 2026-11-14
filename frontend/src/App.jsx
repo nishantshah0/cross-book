@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Client } from "@stomp/stompjs";
 import { api, money, signed } from "./api";
+import { bookSides } from "./book";
 import Chart from "./Chart";
 import Icon from "./Icon";
 
@@ -44,28 +45,6 @@ const describe = (order) =>
   order.status === "OPEN" && order.filledQuantity > 0
     ? order.filledQuantity + " of " + order.quantity + " filled"
     : order.status.toLowerCase();
-// users' price levels with the house merged in, best first, paired into rows
-function bookRows(book, depth = 5) {
-  if (!book) return [];
-  const side = (levels, housePrice, better) => {
-    const merged = levels.map((l) => ({ ...l, house: false }));
-    if (housePrice != null)
-      merged.push({ price: housePrice, quantity: "any", house: true });
-    return merged
-      .sort((a, b) =>
-        Number(a.price) === Number(b.price)
-          ? a.house - b.house
-          : better(Number(a.price), Number(b.price)),
-      )
-      .slice(0, depth);
-  };
-  const bids = side(book.bids, book.house?.bid, (a, b) => b - a),
-    asks = side(book.asks, book.house?.ask, (a, b) => a - b);
-  return Array.from({ length: Math.max(bids.length, asks.length) }, (_, i) => ({
-    bid: bids[i],
-    ask: asks[i],
-  }));
-}
 export default function App() {
   const [account, setAccount] = useState(initialAccount),
     [portfolio, setPortfolio] = useState(null);
@@ -322,12 +301,13 @@ export default function App() {
   const held =
     portfolio?.positions.find((p) => p.symbol === symbol)?.availableQuantity ||
     0;
+  const ladder = bookSides(book);
   const modeLabel =
     mode === "finnhub"
-      ? "LIVE QUOTES"
+      ? "Live quotes"
       : mode === "static"
-        ? "STATIC QUOTES"
-        : "SIMULATED QUOTES";
+        ? "Static prices"
+        : "Simulated prices";
   const historyChange = (q) => {
     const start = history[q.symbol]?.[0]?.price;
     return start ? (Number(q.price) / Number(start) - 1) * 100 : 0;
@@ -335,9 +315,8 @@ export default function App() {
   const accountForms = (
     <>
       <div className="account-intro">
-        <span className="eyebrow">PRACTICE ACCOUNT</span>
         <h2>Open a practice account</h2>
-        <p>Start with $100,000 in simulated buying power.</p>
+        <p>You start with $100,000 in virtual cash.</p>
       </div>
       <div className="account-forms">
         <form onSubmit={create}>
@@ -375,7 +354,7 @@ export default function App() {
         </form>
       </div>
       <p className="account-note">
-        Shared demo · Account IDs are public, not passwords.
+        Accounts here are shared: an account ID is not a password.
       </p>
     </>
   );
@@ -383,77 +362,40 @@ export default function App() {
     <div className="terminal">
       <header className="topbar">
         <a className="brand" href="/" aria-label="Paper Trader home">
-          <span className="brand-logo">
-            <Icon name="chart" size={22} />
-          </span>
-          <strong>
-            PAPER<span>TRADER</span>
-          </strong>
-          <span className="version">TERMINAL</span>
+          PaperTrader
         </a>
-        <span className="header-divider" />
-        <span className="workspace">
-          <Icon name="grid" size={14} />
-          Trading workspace
-        </span>
+        <h1>Trading terminal</h1>
         <div className="topbar-right">
-          <span className="environment">PAPER ACCOUNT</span>
+          <span className="connection">
+            <i className={connected ? "online" : ""} />
+            <span>{connected ? "Connected" : "Reconnecting"}</span>
+          </span>
+          <span className="feed-mode">{modeLabel}</span>
           <button
             className="account-toggle"
             onClick={() => setAccountModal(true)}
           >
-            <span className="avatar">
-              {portfolio?.username.slice(0, 1).toUpperCase() || "P"}
-            </span>
             <span>
               {portfolio?.username || "Open an account"}
               <small>
                 {portfolio ? "Account #" + account : "Start trading"}
               </small>
             </span>
-            <Icon name="chevron" size={13} />
+            <Icon name="chevron" size={12} />
           </button>
         </div>
       </header>
-      <div className="ticker-tape" aria-label="Market ticker">
-        <span className="tape-label">
-          <span className="pulse-dot" />
-          {modeLabel}
-        </span>
-        {quotes.slice(0, 7).map((q) => (
-          <button key={q.symbol} onClick={() => setSymbol(q.symbol)}>
-            <b>{q.symbol}</b>
-            <span>{money(q.price)}</span>
-            <em className={historyChange(q) >= 0 ? "positive" : "negative"}>
-              {percent(historyChange(q))}
-            </em>
-          </button>
-        ))}
-      </div>
       <main>
-        <div className="workspace-heading">
-          <div>
-            <span className="eyebrow">WORKSPACE /</span>
-            <h1>Trading terminal</h1>
-          </div>
-          <div className="connection">
-            <i className={connected ? "online" : ""} />
-            <span>{connected ? "Connected" : "Reconnecting"}</span>
-            <span className="mode-label">
-              {mode === "finnhub" ? "Provider feed" : "Demo environment"}
-            </span>
-          </div>
-        </div>
         {!portfolio && !account && !accountModal && (
           <section className="onboarding">{accountForms}</section>
         )}
         <section className="account-strip" aria-label="Portfolio summary">
           {[
-            ["Total equity", portfolio?.totalValue, "USD"],
-            ["Buying power", portfolio?.buyingPower, "AVAILABLE"],
-            ["Unrealized P&L", portfolio?.unrealizedPnl, "OPEN POSITIONS"],
-            ["Realized P&L", portfolio?.realizedPnl, "CLOSED TRADES"],
-          ].map(([label, value, hint], i) => (
+            ["Equity", portfolio?.totalValue],
+            ["Buying power", portfolio?.buyingPower],
+            ["Unrealized P&L", portfolio?.unrealizedPnl],
+            ["Realized P&L", portfolio?.realizedPnl],
+          ].map(([label, value], i) => (
             <div className="metric" key={label}>
               <span>{label}</span>
               <strong
@@ -467,13 +409,18 @@ export default function App() {
               >
                 {value == null ? "—" : i > 1 ? signed(value) : money(value)}
               </strong>
-              <small>{hint}</small>
             </div>
           ))}
-          <div className="account-return">
-            <span>Account return</span>
+          <div className="metric">
+            <span>Return</span>
             <strong
-              className={portfolio?.totalPnl < 0 ? "negative" : "positive"}
+              className={
+                !portfolio
+                  ? ""
+                  : portfolio.totalPnl < 0
+                    ? "negative"
+                    : "positive"
+              }
             >
               {portfolio
                 ? percent(
@@ -483,9 +430,6 @@ export default function App() {
                   )
                 : "—"}
             </strong>
-            <span className="return-icon">
-              <Icon name="activity" size={34} />
-            </span>
           </div>
         </section>
         {error && (
@@ -498,7 +442,6 @@ export default function App() {
         )}
         {notice && (
           <div className="notice" role="status">
-            <span className="pulse-dot" />
             {notice}
             <button
               aria-label="Dismiss notification"
@@ -510,10 +453,6 @@ export default function App() {
         )}
         <div className="terminal-grid">
           <aside className="watch-panel panel">
-            <div className="panel-heading">
-              <h2>Watchlist</h2>
-              <span className="count">{quotes.length}</span>
-            </div>
             <label className="search">
               <Icon name="search" size={14} />
               <input
@@ -523,10 +462,6 @@ export default function App() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </label>
-            <div className="watch-columns">
-              <span>Symbol / Name</span>
-              <span>Price / Change</span>
-            </div>
             <div className="watchlist">
               {filtered.map((q) => (
                 <button
@@ -556,35 +491,29 @@ export default function App() {
                 <p className="empty">No matching symbols.</p>
               )}
             </div>
-            <div className="watch-foot">
-              <Icon name="clock" size={12} />
-              Change since first observed quote
-            </div>
           </aside>
           <div className="center-column">
             <section className="chart-panel panel">
               <div className="instrument-header">
-                <span className="instrument-logo">{symbol.slice(0, 1)}</span>
-                <div>
-                  <h2>
-                    {symbol} <span>{companies[symbol]}</span>
-                  </h2>
-                  <small>
-                    US EQUITY <i /> USD <i />{" "}
-                    {mode === "finnhub" ? "LIVE FEED" : "PAPER TRADING"}
-                  </small>
-                </div>
-                <span className="instrument-more">{modeLabel}</span>
-              </div>
-              <div className="price-summary">
-                <strong>{selected ? money(selected.price) : "—"}</strong>
-                <span className={change >= 0 ? "positive" : "negative"}>
-                  {change >= 0 ? "↗" : "↘"} {percent(change)}
-                  <small> observed window</small>
+                <h2>
+                  {symbol} <span>{companies[symbol]}</span>
+                </h2>
+                <strong className="last-price">
+                  {selected ? money(selected.price) : "—"}
+                </strong>
+                <span
+                  className={
+                    "price-change " + (change >= 0 ? "positive" : "negative")
+                  }
+                  title="Change over the chart's time range"
+                >
+                  {percent(change)}
                 </span>
-              </div>
-              <div className="chart-toolbar">
-                <div role="group" aria-label="Chart time range">
+                <div
+                  className="chart-ranges"
+                  role="group"
+                  aria-label="Chart time range"
+                >
                   {[
                     ["5", "5m"],
                     ["15", "15m"],
@@ -601,28 +530,8 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <span>
-                  <Icon name="chart" size={14} />
-                  Price line
-                  <span className="chart-divider" />
-                  USD
-                </span>
               </div>
               <Chart key={symbol + timeframe} points={points} symbol={symbol} />
-              <div className="chart-footer">
-                <span>
-                  <span className="pulse-dot" />{" "}
-                  {mode === "finnhub"
-                    ? "Provider quotes"
-                    : "Simulated price feed"}
-                </span>
-                <span>
-                  {selected
-                    ? "Last update " +
-                      new Date(selected.asOf).toLocaleTimeString()
-                    : "Connecting…"}
-                </span>
-              </div>
             </section>
             <section className="ledger panel">
               <div
@@ -880,204 +789,206 @@ export default function App() {
               )}
             </section>
           </div>
-          <aside className="right-column">
-            <section className="order-panel panel">
-              <div className="panel-heading">
-                <h2>Order entry</h2>
-                <span className="paper-label">PAPER</span>
-              </div>
-              <form onSubmit={submit}>
-                <div className="segmented">
-                  {["BUY", "SELL"].map((s) => (
-                    <button
-                      type="button"
-                      key={s}
-                      aria-pressed={side === s}
-                      className={side === s ? "active " + s.toLowerCase() : ""}
-                      onClick={() => setSide(s)}
-                    >
-                      {s === "BUY" ? "Buy" : "Sell"}
-                    </button>
-                  ))}
-                </div>
-                <div className="field">
-                  <label htmlFor="symbol">Instrument</label>
-                  <select
-                    id="symbol"
-                    value={symbol}
-                    onChange={(e) => setSymbol(e.target.value)}
-                  >
-                    {quotes.map((q) => (
-                      <option key={q.symbol}>{q.symbol}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="order-type">Order type</label>
-                  <select
-                    id="order-type"
-                    value={type}
-                    onChange={(e) => setType(e.target.value)}
-                  >
-                    <option value="MARKET">Market</option>
-                    <option value="LIMIT">Limit</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="quantity">
-                    Quantity<span aria-hidden="true">SHARES</span>
-                  </label>
-                  <input
-                    id="quantity"
-                    type="number"
-                    required
-                    min="1"
-                    max="1000000"
-                    step="1"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                  />
-                </div>
-                {type === "LIMIT" && (
-                  <div className="field">
-                    <label htmlFor="limit">
-                      Limit price<span aria-hidden="true">USD</span>
-                    </label>
-                    <input
-                      id="limit"
-                      type="number"
-                      required
-                      min="0.0001"
-                      max="9999999999"
-                      step="0.0001"
-                      value={limit}
-                      onChange={(e) => setLimit(e.target.value)}
-                    />
+          <section className="book panel" aria-label={symbol + " order book"}>
+            <div className="panel-heading">
+              <h2>Order book</h2>
+              <span className="muted">{symbol}</span>
+            </div>
+            <div className="book-head">
+              <span>Price</span>
+              <span>Size</span>
+              <span>Orders</span>
+            </div>
+            {["asks", "bids"].map((key) => (
+              <div className={"book-side " + key} key={key}>
+                {key === "bids" && (
+                  <div className="book-spread">
+                    {book?.house
+                      ? "Spread " +
+                        (
+                          Number(book.house.ask) - Number(book.house.bid)
+                        ).toFixed(2)
+                      : "No house quote"}
                   </div>
                 )}
-                <div className="quantity-shortcuts">
-                  {[1, 5, 10, 25].map((q) => (
-                    <button
-                      type="button"
-                      key={q}
-                      onClick={() => setQuantity(String(q))}
-                    >
-                      {q} shares
-                    </button>
-                  ))}
-                </div>
-                <div className="order-summary">
-                  <div>
-                    <span>{side === "BUY" ? "House ask" : "House bid"}</span>
-                    <b>{housePrice ? money(housePrice) : "—"}</b>
-                  </div>
-                  <div>
-                    <span>
-                      {side === "BUY" ? "Buying power" : "Shares available"}
-                    </span>
-                    <b>
-                      {side === "BUY"
-                        ? portfolio
-                          ? money(portfolio.buyingPower)
-                          : "—"
-                        : held}
-                    </b>
-                  </div>
-                  <div className="order-total">
-                    <span>Estimated total</span>
-                    <b>{money(estimate)}</b>
-                  </div>
-                </div>
-                <button
-                  className={"submit-order " + side.toLowerCase()}
-                  disabled={busy || !portfolio || !selected}
-                >
-                  {busy
-                    ? "Submitting…"
-                    : (side === "BUY" ? "Buy " : "Sell ") + symbol}
-                  <Icon name="arrow" size={15} />
-                </button>
-                <p className="order-note">
-                  {type === "LIMIT"
-                    ? "Fills against other traders first, then the house. Unfilled shares rest until an order or quote crosses your limit."
-                    : "Fills at the best prices available: other traders inside the spread, then the house. Whole shares only."}
-                </p>
-              </form>
-            </section>
-            <section className="book panel" aria-label={symbol + " order book"}>
-              <div className="panel-heading">
-                <h2>Order book</h2>
-                <span className="muted">{symbol}</span>
-              </div>
-              <table className="book-table">
-                <thead>
-                  <tr>
-                    <th>Bid size</th>
-                    <th>Bid</th>
-                    <th>Ask</th>
-                    <th>Ask size</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bookRows(book).map((row, i) => (
-                    <tr key={i}>
-                      <td className={row.bid?.house ? "house" : ""}>
-                        {row.bid ? row.bid.quantity : ""}
-                      </td>
-                      <td className="positive">
-                        {row.bid ? money(row.bid.price) : ""}
-                      </td>
-                      <td className="negative">
-                        {row.ask ? money(row.ask.price) : ""}
-                      </td>
-                      <td className={row.ask?.house ? "house" : ""}>
-                        {row.ask ? row.ask.quantity : ""}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="book-note">
-                {book?.house
-                  ? "The house fills any size at its price. Orders inside its spread trade with other users first."
-                  : "Quote is stale. Users can still trade with each other; the house is out."}
-              </p>
-            </section>
-            <section className="leaderboard panel">
-              <div className="panel-heading">
-                <h2>Leaderboard</h2>
-                <span className="muted">RETURN</span>
-              </div>
-              {leaders.slice(0, 4).map((l, i) => (
-                <div className="leader" key={l.accountId}>
-                  <span className="rank">{String(i + 1).padStart(2, "0")}</span>
-                  <span title={l.username}>
-                    {l.username}
-                    <small>{money(l.totalValue)}</small>
-                  </span>
-                  <strong
-                    className={l.returnPercent >= 0 ? "positive" : "negative"}
+                {ladder[key].map((level) => (
+                  <button
+                    type="button"
+                    className={"book-level" + (level.house ? " house" : "")}
+                    key={key + level.price + level.house}
+                    title="Use this price for a limit order"
+                    onClick={() => {
+                      setType("LIMIT");
+                      setLimit(String(Number(level.price)));
+                    }}
                   >
-                    {percent(Number(l.returnPercent))}
-                  </strong>
+                    <span className="book-price">
+                      {Number(level.price).toFixed(2)}
+                    </span>
+                    <span>{level.house ? "any" : level.quantity}</span>
+                    <span className="book-who">
+                      {level.house ? "house" : level.orders}
+                    </span>
+                    {!level.house && (
+                      <i
+                        style={{
+                          width: (level.quantity / ladder.deepest) * 100 + "%",
+                        }}
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))}
+            <p className="book-note">
+              {book?.house
+                ? "Click a price to use it as your limit. The house trades any size at its quote."
+                : "The quote is stale, so the house is out. Traders can still trade with each other."}
+            </p>
+          </section>
+          <section className="order-panel panel">
+            <div className="panel-heading">
+              <h2>Order</h2>
+            </div>
+            <form onSubmit={submit}>
+              <div className="segmented">
+                {["BUY", "SELL"].map((s) => (
+                  <button
+                    type="button"
+                    key={s}
+                    aria-pressed={side === s}
+                    className={side === s ? "active " + s.toLowerCase() : ""}
+                    onClick={() => setSide(s)}
+                  >
+                    {s === "BUY" ? "Buy" : "Sell"}
+                  </button>
+                ))}
+              </div>
+              <div className="field">
+                <label htmlFor="symbol">Instrument</label>
+                <select
+                  id="symbol"
+                  value={symbol}
+                  onChange={(e) => setSymbol(e.target.value)}
+                >
+                  {quotes.map((q) => (
+                    <option key={q.symbol}>{q.symbol}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="order-type">Order type</label>
+                <select
+                  id="order-type"
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
+                >
+                  <option value="MARKET">Market</option>
+                  <option value="LIMIT">Limit</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="quantity">Quantity</label>
+                <input
+                  id="quantity"
+                  type="number"
+                  required
+                  min="1"
+                  max="1000000"
+                  step="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                />
+              </div>
+              {type === "LIMIT" && (
+                <div className="field">
+                  <label htmlFor="limit">Limit price</label>
+                  <input
+                    id="limit"
+                    type="number"
+                    required
+                    min="0.0001"
+                    max="9999999999"
+                    step="0.0001"
+                    value={limit}
+                    onChange={(e) => setLimit(e.target.value)}
+                  />
                 </div>
-              ))}
-              {!leaders.length && (
-                <p className="empty">Create an account to join the board.</p>
               )}
-            </section>
-          </aside>
+              <div className="quantity-shortcuts">
+                {[1, 5, 10, 25].map((q) => (
+                  <button
+                    type="button"
+                    key={q}
+                    onClick={() => setQuantity(String(q))}
+                  >
+                    {q === 1 ? "1 share" : q + " shares"}
+                  </button>
+                ))}
+              </div>
+              <div className="order-summary">
+                <div>
+                  <span>{side === "BUY" ? "House ask" : "House bid"}</span>
+                  <b>{housePrice ? money(housePrice) : "—"}</b>
+                </div>
+                <div>
+                  <span>
+                    {side === "BUY" ? "Buying power" : "Shares available"}
+                  </span>
+                  <b>
+                    {side === "BUY"
+                      ? portfolio
+                        ? money(portfolio.buyingPower)
+                        : "—"
+                      : held}
+                  </b>
+                </div>
+                <div className="order-total">
+                  <span>Estimated total</span>
+                  <b>{money(estimate)}</b>
+                </div>
+              </div>
+              <button
+                className={"submit-order " + side.toLowerCase()}
+                disabled={busy || !portfolio || !selected}
+              >
+                {busy
+                  ? "Submitting…"
+                  : (side === "BUY" ? "Buy " : "Sell ") + symbol}
+              </button>
+              <p className="order-note">
+                {type === "LIMIT"
+                  ? "Fills against other traders first, then the house. Anything left rests in the book at your limit."
+                  : "Fills at the best prices available: other traders first, then the house."}
+              </p>
+            </form>
+          </section>
+          <section className="leaderboard panel">
+            <div className="panel-heading">
+              <h2>Leaderboard</h2>
+              <span className="muted">Return</span>
+            </div>
+            {leaders.slice(0, 4).map((l, i) => (
+              <div className="leader" key={l.accountId}>
+                <span className="rank">{i + 1}</span>
+                <span title={l.username}>
+                  {l.username}
+                  <small>{money(l.totalValue)}</small>
+                </span>
+                <strong
+                  className={l.returnPercent >= 0 ? "positive" : "negative"}
+                >
+                  {percent(Number(l.returnPercent))}
+                </strong>
+              </div>
+            ))}
+            {!leaders.length && (
+              <p className="empty">Create an account to join the board.</p>
+            )}
+          </section>
         </div>
       </main>
-      <footer>
-        <span>
-          <span className="pulse-dot" />
-          All trades are simulated. No real funds.
-        </span>
-        <span>
-          PAPERTRADER <i /> {quotes.length} INSTRUMENTS <i /> USD
-        </span>
-      </footer>
+      <footer>All trades are simulated. No real money is involved.</footer>
       <dialog
         ref={dialog}
         className="account-dialog"

@@ -38,7 +38,7 @@ export default function Chart({ points, symbol }) {
   const active = hover != null ? points[hover] : null;
   const last = values.at(-1),
     up = values.length < 2 || last >= values[0];
-  const color = up ? "#37c996" : "#ed727b";
+  const color = up ? "#2fbf87" : "#ef6b73";
   function track(e) {
     const box = e.currentTarget.getBoundingClientRect();
     const px = ((e.clientX - box.left) / box.width) * W;
@@ -56,11 +56,9 @@ export default function Chart({ points, symbol }) {
     <div className="chart-wrap" ref={container}>
       <div className="chart-readout">
         <span>{symbol}</span>
-        <span>{active ? time(active.asOf) : "LATEST"}</span>
+        <span>{active ? time(active.asOf) : "Latest"}</span>
         <b style={{ color }}>{money(active?.price ?? last)}</b>
-        <span className="chart-readout-end">
-          {points.length} OBSERVED QUOTES
-        </span>
+        <span className="chart-readout-end">{points.length} quotes</span>
       </div>
       <svg
         className="chart"
@@ -154,7 +152,7 @@ export default function Chart({ points, symbol }) {
               points={line}
               fill="none"
               stroke={color}
-              strokeWidth="2"
+              strokeWidth="1.5"
               vectorEffect="non-scaling-stroke"
             />
           </>
@@ -214,7 +212,7 @@ export default function Chart({ points, symbol }) {
               cx={x(hover)}
               cy={y(Number(active.price))}
               r="5"
-              stroke="#101318"
+              stroke="#0b0c0e"
               strokeWidth="2"
               fill={color}
             />
@@ -223,7 +221,6 @@ export default function Chart({ points, symbol }) {
       </svg>
       {points.length < 2 && (
         <div className="chart-wait">
-          <span className="pulse-dot" />
           Waiting for the next quote
           <span>Only observed prices appear here.</span>
         </div>

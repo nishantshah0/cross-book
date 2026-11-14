@@ -14,9 +14,9 @@ Trade against other users and a simulated market maker, watch partial fills land
 
 [Quick start](#quick-start) · [How matching works](#how-matching-works) · [Architecture](#architecture) · [API](#api) · [Design notes](docs/architecture.md)
 
-<img src="docs/dashboard.gif" alt="A resting limit order filling on its own as the price drops" width="900">
+<img src="docs/dashboard.png" alt="The trading terminal: watchlist, chart, order book and order ticket" width="900">
 
-<sub>A buy limit for 10 AAPL at $232.15 rests in the book until the price falls through it, then fills with no further request. Cash, P&L, positions and history update over the WebSocket.</sub>
+<sub>The trading terminal. The order book shows other traders' resting orders around the house's bid and ask; click a price to use it as your limit. Fills, cash and positions update over the WebSocket.</sub>
 
 </div>
 
@@ -28,7 +28,8 @@ Trade against other users and a simulated market maker, watch partial fills land
 - **Books that always balance.** The house keeps its own books, so every dollar and share a user gains, the house gives up. A ledger audit proves nothing was created or destroyed, and it runs after every integration test.
 - **A complete audit trail.** Every order event (placed, partly filled, filled, cancelled, rejected) is logged with a sequence number in the same transaction as the change, so the log never disagrees with the books.
 - **Safe under concurrency.** Accounts are locked in ID order so trades can't deadlock, the book changes only after the transaction commits, and retries with an `Idempotency-Key` never place the same order twice.
-- **A full trading terminal.** Searchable watchlist, a chart with crosshair and time ranges, an order ticket showing the house bid and ask, a live order book, P&L and a leaderboard ranked by return.
+- **A full trading terminal.** Everything on one screen: a searchable watchlist, a chart with a crosshair and time ranges, an order book ladder you can click to set a limit price, the order ticket, positions and order history, and a leaderboard.
+- **A home page that proves it.** A live demo places a real order and shows the events it created, next to the running event log and ledger audit.
 - **Live everywhere.** Fills, quotes and portfolio changes are pushed over STOMP WebSockets to every open tab, with a polling fallback.
 - **Tested against the real thing.** The backend tests run on Postgres through Testcontainers, and Playwright and Cypress drive the packaged app in CI.
 
@@ -57,9 +58,9 @@ docker compose --profile app down
 <summary><b>Screenshots</b></summary>
 <br>
 
-![PaperTrader home page](docs/home.png)
+The home page, with a working demo that places a real order and shows the events it created:
 
-![PaperTrader trading terminal](docs/dashboard.png)
+![PaperTrader home page](docs/home.png)
 
 </details>
 
@@ -273,7 +274,7 @@ More on the threading model, the race handling and the tradeoffs is in [docs/arc
 
 | Mode             | Behavior                                                       |
 | ---------------- | -------------------------------------------------------------- |
-| `demo` (default) | Simulated price updates every 15 seconds, labeled in the UI.   |
+| `demo` (default) | A simulated random walk, updated every 15 seconds and labeled. |
 | `static`         | Configured prices never change, for deterministic experiments. |
 | `finnhub`        | Real provider quotes, fetched server-side. Needs your own key. |
 
@@ -347,6 +348,7 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | GET    | `/api/quotes/history`                   | Up to 240 recent quotes per symbol         |
 | GET    | `/api/leaderboard`                      | Top 20 by return percentage                |
 | GET    | `/api/events?after=&symbol=&accountId=` | Order event log, by sequence number        |
+| GET    | `/api/events/recent`                    | The latest order events, newest first      |
 | GET    | `/api/ledger`                           | Run the ledger audit; the house's books    |
 | GET    | `/actuator/health`                      | Health check                               |
 

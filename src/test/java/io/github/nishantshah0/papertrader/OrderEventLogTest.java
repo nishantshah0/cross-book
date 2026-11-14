@@ -104,6 +104,13 @@ class OrderEventLogTest extends ApiTestSupport {
         assertThat(events("accountId=" + buyer.id())).hasSize(2)
                 .allSatisfy(event -> assertThat(event.accountId()).isEqualTo(buyer.id()));
         assertThat(get("/api/events?limit=5000")).hasStatus(HttpStatus.BAD_REQUEST);
+
+        // the tape: the newest events first, the same ones the log pages through
+        var recent = readList(get("/api/events/recent?limit=3"), new TypeReference<List<OrderEventResponse>>() {});
+        assertThat(recent).hasSize(3);
+        assertThat(recent).extracting(OrderEventResponse::seq).isSortedAccordingTo((a, b) -> Long.compare(b, a));
+        assertThat(events("after=" + (recent.get(2).seq() - 1) + "&limit=3")).containsExactlyElementsOf(
+                recent.reversed());
     }
 
     @Test

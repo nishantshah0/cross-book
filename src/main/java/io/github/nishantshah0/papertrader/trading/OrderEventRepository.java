@@ -18,4 +18,7 @@ public interface OrderEventRepository extends JpaRepository<OrderEvent, Long> {
     List<OrderEvent> after(long after, String symbol, Long accountId, Limit limit);
 
     List<OrderEvent> findByOrderIdOrderBySeq(Long orderId);
+
+    // the newest events, newest first
+    List<OrderEvent> findAllByOrderBySeqDesc(Limit limit);
 }

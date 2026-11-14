@@ -189,9 +189,7 @@ test("chart keeps server-observed history across a browser reload", async ({
     .toBeGreaterThan(1);
   const a = await account(request);
   await open(page, a.id);
-  await expect(page.locator(".chart-readout-end")).not.toHaveText(
-    "0 OBSERVED QUOTES",
-  );
+  await expect(page.locator(".chart-readout-end")).not.toHaveText("0 quotes");
   await page.reload();
   await expect(page.locator(".chart polyline")).toBeVisible();
   await expect(page.locator(".chart-wait")).toHaveCount(0);

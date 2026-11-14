@@ -1,66 +1,475 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon";
 import { api, money } from "./api";
+import { bookSides } from "./book";
+
+const REPO = "https://github.com/nishantshah0/paper-trader";
+const SOURCE =
+  REPO + "/blob/main/src/main/java/io/github/nishantshah0/papertrader/";
+
 const names = {
-  AAPL: "Apple Inc.",
-  NVDA: "NVIDIA Corporation",
-  MSFT: "Microsoft Corporation",
-  AMZN: "Amazon.com Inc.",
-  GOOGL: "Alphabet Inc.",
-  JPM: "JPMorgan Chase & Co.",
+  AAPL: "Apple",
+  NVDA: "NVIDIA",
+  MSFT: "Microsoft",
+  AMZN: "Amazon",
+  GOOGL: "Alphabet",
+  JPM: "JPMorgan Chase",
+  META: "Meta Platforms",
+  TSLA: "Tesla",
 };
+const demoSymbols = ["AAPL", "NVDA", "MSFT"];
+
+const internals = [
+  [
+    "Matching",
+    "Orders match on price, then time, and can fill in parts. One thread per stock owns that stock's book, so nothing within a stock interleaves.",
+    "MatchingEngine.java",
+    SOURCE + "trading/MatchingEngine.java",
+  ],
+  [
+    "Settlement",
+    "Each order settles in a single Postgres transaction: cash, shares, both orders and the trade. Accounts are locked in ID order, so two trades can never deadlock.",
+    "OrderExecution.java",
+    SOURCE + "trading/OrderExecution.java",
+  ],
+  [
+    "Ledger audit",
+    "The house keeps its own books, so no money or shares can appear or disappear. An audit rebuilds every balance from its trades, and runs after every integration test.",
+    "LedgerAudit.java",
+    SOURCE + "ledger/LedgerAudit.java",
+  ],
+  [
+    "Event log",
+    "Every order event is written with a sequence number in the same transaction as the change it describes, including orders that were refused.",
+    "OrderEvent.java",
+    SOURCE + "trading/OrderEvent.java",
+  ],
+  [
+    "Tests",
+    "The backend tests run against a real Postgres database. Playwright and Cypress drive the packaged app in CI on every push.",
+    "CI runs",
+    REPO + "/actions",
+  ],
+];
+
 const faqs = [
   [
     "Am I trading with real money?",
     "No. Every account starts with virtual cash. Orders are simulated, and PaperTrader has no connection to a brokerage or the ability to move real funds.",
   ],
   [
-    "Where do the prices come from?",
-    "This app starts with a clearly labeled simulated price feed. An optional live-feed configuration uses provider quotes. Check the feed label in the terminal to see which mode is active.",
-  ],
-  [
-    "How do I create or reopen an account?",
-    "Launch the terminal and choose a lowercase account name. Save the account ID shown in the top-right corner to reopen it later. Practice accounts are shared in this demo; account IDs are not private sign-in credentials.",
+    "Who is on the other side of my trade?",
+    "Another practice account, when its resting order beats the house. Otherwise the house: a simulated market maker that quotes a bid and an ask around the feed price and trades any size.",
   ],
   [
     "What happens to my limit order?",
-    "A buy limit executes when the quote is at or below your limit. A sell limit executes at or above it. Cash and shares are checked again at execution; an unfunded order is rejected. You can cancel an open order from the activity panel.",
+    "It trades straight away with anything at your price or better. Whatever is left rests in the book, possibly partly filled, until someone trades with it, the house quote crosses it, or you cancel it. Cancelling keeps what already filled.",
+  ],
+  [
+    "Where do the prices come from?",
+    "A simulated feed by default, labelled as such. An optional live mode uses provider quotes, and the house stops trading whenever a quote goes stale.",
+  ],
+  [
+    "How do I reopen an account?",
+    "Open the terminal and enter your account ID, shown in the top-right corner once you have an account. Practice accounts are shared in this demo, so an account ID is not a private sign-in.",
   ],
   [
     "How close is this to real trading?",
-    "This is a learning simulator. It uses whole-share, whole-order fills and does not model liquidity, slippage, commissions, shorting, or corporate actions. Simulated results are not a prediction of real-market performance.",
+    "There is a real order book, partial fills and a spread. But fills are whole shares, there is no shorting, commissions or corporate actions, and the house trades any size. Results here don't predict real-market performance.",
   ],
 ];
 
-export default function Home() {
-  const [menu, setMenu] = useState(false),
-    [quotes, setQuotes] = useState([]),
-    [mode, setMode] = useState("");
+const eventLabels = {
+  PLACED: "Placed",
+  PARTIALLY_FILLED: "Part filled",
+  FILLED: "Filled",
+  CANCELLED: "Cancelled",
+  REJECTED: "Rejected",
+};
+
+const price = (value) => Number(value).toFixed(2);
+
+const describeEvent = (event) =>
+  event.side.toLowerCase() +
+  " " +
+  (event.fillQuantity ?? event.quantity) +
+  " " +
+  event.symbol +
+  (event.fillPrice != null ? " @ " + price(event.fillPrice) : "");
+
+const savedAccount = () => {
+  try {
+    return localStorage.getItem("paper-trader.account") || "";
+  } catch {
+    return "";
+  }
+};
+
+// Calls load now and then every interval, skipping ticks while the tab is hidden.
+function usePoll(load, interval, deps = []) {
+  const saved = useRef(load);
+  saved.current = load;
   useEffect(() => {
     let active = true;
-    async function refresh() {
-      try {
-        const [q, s] = await Promise.all([
-          api("/quotes"),
-          api("/quotes/status"),
-        ]);
-        if (active) {
-          setQuotes(q);
-          setMode(s.mode);
-        }
-      } catch {
-        if (active) setMode("unavailable");
-      }
-    }
-    refresh();
-    const timer = setInterval(refresh, 15000);
+    const run = () => {
+      if (document.visibilityState !== "hidden") saved.current(() => active);
+    };
+    run();
+    const timer = setInterval(run, interval);
+    document.addEventListener("visibilitychange", run);
     return () => {
       active = false;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", run);
     };
-  }, []);
-  const close = () => setMenu(false);
-  const feedLabel =
+  }, deps);
+}
+
+function EventRows({ events }) {
+  return events.map((event) => (
+    <li key={event.seq} className={"event " + event.type.toLowerCase()}>
+      <span className="event-seq">#{event.seq}</span>
+      <span className="event-type">{eventLabels[event.type]}</span>
+      <span className="event-what">{describeEvent(event)}</span>
+      <span className="event-with">
+        {event.counterparty === "HOUSE"
+          ? "vs house"
+          : event.counterparty === "USER"
+            ? "vs trader"
+            : ""}
+      </span>
+    </li>
+  ));
+}
+
+// A working order ticket on the live exchange. The first order opens a guest practice
+// account and remembers it, so the terminal picks up where the demo left off.
+function Demo({ onTrade }) {
+  const [symbol, setSymbol] = useState("AAPL"),
+    [side, setSide] = useState("BUY"),
+    [quantity, setQuantity] = useState("5"),
+    [limit, setLimit] = useState(""),
+    [book, setBook] = useState(null),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [receipt, setReceipt] = useState(null),
+    [account, setAccount] = useState(savedAccount),
+    [portfolio, setPortfolio] = useState(null);
+
+  usePoll(
+    async (active) => {
+      try {
+        const next = await api("/book/" + symbol);
+        if (active()) setBook(next);
+      } catch {
+        /* the ticket stays disabled without a book */
+      }
+    },
+    4000,
+    [symbol],
+  );
+  useEffect(() => {
+    if (!account) return;
+    api("/accounts/" + account + "/portfolio")
+      .then(setPortfolio)
+      .catch(() => setAccount(""));
+  }, [account]);
+
+  const current = book?.symbol === symbol ? book : null;
+  const ladder = bookSides(current, 4);
+  const shares = Number(quantity);
+  const held =
+    portfolio?.positions.find((p) => p.symbol === symbol)?.availableQuantity ??
+    0;
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      let id = account;
+      if (!id) {
+        const created = await api("/accounts", {
+          method: "POST",
+          body: JSON.stringify({
+            username: "guest_" + Math.random().toString(36).slice(2, 10),
+          }),
+        });
+        id = String(created.id);
+        try {
+          localStorage.setItem("paper-trader.account", id);
+        } catch {
+          /* private browsing: the account still works for this visit */
+        }
+        setAccount(id);
+      }
+      const [latest] = await api("/events/recent?limit=1");
+      await api("/accounts/" + id + "/orders", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({
+          symbol,
+          side,
+          quantity: shares,
+          ...(limit ? { type: "LIMIT", limitPrice: Number(limit) } : {}),
+        }),
+      });
+      const [events, updated] = await Promise.all([
+        api("/events?accountId=" + id + "&after=" + (latest?.seq ?? 0)),
+        api("/accounts/" + id + "/portfolio"),
+      ]);
+      setReceipt(events);
+      setPortfolio(updated);
+      onTrade();
+      setBook(await api("/book/" + symbol));
+    } catch (problem) {
+      setReceipt(null);
+      setError(problem.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="demo" aria-label="Live demo">
+      <header className="demo-head">
+        <h2>Try it</h2>
+        <div className="tabs" role="group" aria-label="Demo symbol">
+          {demoSymbols.map((s) => (
+            <button
+              key={s}
+              aria-pressed={s === symbol}
+              onClick={() => {
+                setSymbol(s);
+                setLimit("");
+                setReceipt(null);
+                setError("");
+              }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </header>
+      <div className="demo-body">
+        <div className="demo-book" aria-label={symbol + " order book"}>
+          <div className="ladder-head">
+            <span>Price</span>
+            <span>Size</span>
+          </div>
+          {["asks", "bids"].map((key) => (
+            <div className={"ladder " + key} key={key}>
+              {key === "bids" && (
+                <div className="ladder-spread">
+                  {current?.house
+                    ? "Spread " +
+                      price(
+                        Number(current.house.ask) - Number(current.house.bid),
+                      )
+                    : "Waiting for a quote"}
+                </div>
+              )}
+              {ladder[key].map((level) => (
+                <button
+                  type="button"
+                  key={key + level.price + level.house}
+                  className="level"
+                  title="Use this price for a limit order"
+                  onClick={() => setLimit(price(level.price))}
+                >
+                  <span className="level-price">{price(level.price)}</span>
+                  <span>{level.house ? "house" : level.quantity}</span>
+                  {!level.house && (
+                    <i
+                      style={{
+                        width: (level.quantity / ladder.deepest) * 100 + "%",
+                      }}
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+        <form className="demo-ticket" onSubmit={submit}>
+          <div className="segmented">
+            {["BUY", "SELL"].map((s) => (
+              <button
+                type="button"
+                key={s}
+                aria-pressed={side === s}
+                className={side === s ? "active " + s.toLowerCase() : ""}
+                onClick={() => setSide(s)}
+              >
+                {s === "BUY" ? "Buy" : "Sell"}
+              </button>
+            ))}
+          </div>
+          <label>
+            Shares
+            <input
+              type="number"
+              min="1"
+              max="1000"
+              step="1"
+              required
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+            />
+          </label>
+          <label>
+            Limit price
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              placeholder="Market"
+              value={limit}
+              onChange={(e) => setLimit(e.target.value)}
+            />
+          </label>
+          <button
+            className={"place " + side.toLowerCase()}
+            disabled={busy || !current || !(shares > 0)}
+          >
+            {busy
+              ? "Placing…"
+              : (side === "BUY" ? "Buy " : "Sell ") +
+                (shares > 0 ? shares + " " : "") +
+                symbol}
+          </button>
+          <p className="demo-account">
+            {portfolio
+              ? "Account #" +
+                portfolio.accountId +
+                " · " +
+                money(portfolio.cash) +
+                " cash · " +
+                held +
+                " " +
+                symbol
+              : "Your first order opens a guest account with $100,000 of virtual cash."}
+          </p>
+        </form>
+      </div>
+      <div className="demo-result" aria-live="polite">
+        {error && (
+          <p className="demo-error" role="alert">
+            {error}
+          </p>
+        )}
+        {receipt && (
+          <>
+            <ol className="events" aria-label="What your order did">
+              <EventRows events={receipt} />
+            </ol>
+            <a className="demo-next" href="/terminal">
+              See it in the terminal →
+            </a>
+          </>
+        )}
+        {!error && !receipt && (
+          <p className="demo-hint">
+            This is the real exchange, not a mock-up. Place an order and the
+            events it creates show up here.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function Record({ events, ledger }) {
+  const profit = ledger
+    ? ledger.house.reduce((sum, books) => sum + Number(books.profit ?? 0), 0)
+    : null;
+  return (
+    <section id="record" className="home-section record">
+      <div className="section-head">
+        <h2>Everything is on the record</h2>
+        <p>
+          These numbers come from the running exchange. Each one links to the
+          API that produced it.
+        </p>
+      </div>
+      <div className="record-grid">
+        <div>
+          <h3>
+            Latest order events <a href="/api/events/recent">/api/events</a>
+          </h3>
+          {events && events.length === 0 ? (
+            <p className="quiet">
+              No orders yet. Place one above and it appears here.
+            </p>
+          ) : (
+            <ol className="events" aria-label="Latest order events">
+              <EventRows events={events || []} />
+            </ol>
+          )}
+        </div>
+        <div>
+          <h3>
+            Ledger audit <a href="/api/ledger">/api/ledger</a>
+          </h3>
+          <dl className="facts">
+            <div>
+              <dt>Books</dt>
+              <dd className={ledger && !ledger.balanced ? "negative" : ""}>
+                {ledger == null
+                  ? "Checking…"
+                  : ledger === false
+                    ? "Unavailable"
+                    : ledger.balanced
+                      ? "Balanced"
+                      : "Out of balance"}
+              </dd>
+            </div>
+            <div>
+              <dt>Trades audited</dt>
+              <dd>{ledger ? ledger.totals.trades.toLocaleString() : "—"}</dd>
+            </div>
+            <div>
+              <dt>Accounts</dt>
+              <dd>{ledger ? ledger.totals.accounts.toLocaleString() : "—"}</dd>
+            </div>
+            <div>
+              <dt>Traders' cash</dt>
+              <dd>{ledger ? money(ledger.totals.userCash) : "—"}</dd>
+            </div>
+            <div>
+              <dt>House cash</dt>
+              <dd>{ledger ? money(ledger.totals.houseCash) : "—"}</dd>
+            </div>
+            <div>
+              <dt>Cash accounts started with</dt>
+              <dd>{ledger ? money(ledger.totals.startingCash) : "—"}</dd>
+            </div>
+            <div>
+              <dt>House profit at the last price</dt>
+              <dd>{profit == null ? "—" : money(profit)}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Markets() {
+  const [quotes, setQuotes] = useState([]),
+    [mode, setMode] = useState("");
+  usePoll(async (active) => {
+    try {
+      const [q, s] = await Promise.all([api("/quotes"), api("/quotes/status")]);
+      if (active()) {
+        setQuotes(q);
+        setMode(s.mode);
+      }
+    } catch {
+      if (active()) setMode("unavailable");
+    }
+  }, 15000);
+  const feed =
     mode === "finnhub"
       ? "Provider quotes"
       : mode === "static"
@@ -71,385 +480,231 @@ export default function Home() {
             ? "Simulated prices"
             : "Connecting";
   return (
+    <section id="markets" className="home-section">
+      <div className="section-head">
+        <h2>Markets</h2>
+        <p>{feed}. Pick a stock to open its chart and order ticket.</p>
+      </div>
+      <div className="broker-market-table">
+        <table aria-label="Available market quotes">
+          <thead>
+            <tr>
+              <th>Stock</th>
+              <th>Last price</th>
+              <th>Quoted at</th>
+              <th>
+                <span className="sr-only">Open</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(names).map(([symbol, name]) => {
+              const q = quotes.find((quote) => quote.symbol === symbol);
+              const valid = q && new Date(q.asOf).getTime() > 0;
+              return (
+                <tr key={symbol}>
+                  <td>
+                    <a
+                      className="home-quote"
+                      href={"/terminal?symbol=" + symbol}
+                    >
+                      <b>{symbol}</b>
+                      <small>{name}</small>
+                    </a>
+                  </td>
+                  <td className="market-price">
+                    {valid ? money(q.price) : "—"}
+                  </td>
+                  <td className="quote-time">
+                    {valid
+                      ? new Date(q.asOf).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })
+                      : "—"}
+                  </td>
+                  <td>
+                    <a
+                      className="quote-action"
+                      href={"/terminal?symbol=" + symbol}
+                      aria-label={"Open " + symbol + " in terminal"}
+                    >
+                      Trade
+                    </a>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+export default function Home() {
+  const [menu, setMenu] = useState(false),
+    [events, setEvents] = useState(null),
+    [ledger, setLedger] = useState(null),
+    [trades, setTrades] = useState(0);
+  const close = () => setMenu(false);
+  usePoll(
+    async (active) => {
+      try {
+        const next = await api("/events/recent?limit=8");
+        if (active()) setEvents(next);
+      } catch {
+        if (active()) setEvents((current) => current ?? []);
+      }
+    },
+    3000,
+    [trades],
+  );
+  usePoll(
+    async (active) => {
+      try {
+        const report = await api("/ledger");
+        if (active()) setLedger(report);
+      } catch {
+        if (active()) setLedger(false);
+      }
+    },
+    30000,
+    [trades],
+  );
+  return (
     <div className="home">
       <a className="home-skip" href="#home-main">
         Skip to content
       </a>
-      <div className="broker-utility">
-        <div>
-          <span>Paper trading simulator</span>
-          <span>
-            Virtual funds only <i /> No brokerage connection
-          </span>
-        </div>
-      </div>
       <header className="home-nav">
         <a href="/" className="home-brand" aria-label="Paper Trader home">
-          <Icon name="chart" size={27} />
-          <strong>PaperTrader</strong>
+          PaperTrader
         </a>
         <nav
           className={menu ? "home-links open" : "home-links"}
           aria-label="Main navigation"
           id="mobile-menu-content"
         >
-          <a href="#platform" onClick={close}>
-            Platform
+          <a href="#record" onClick={close}>
+            Live record
+          </a>
+          <a href="#internals" onClick={close}>
+            How it works
           </a>
           <a href="#markets" onClick={close}>
             Markets
           </a>
-          <a href="#how-it-works" onClick={close}>
-            Getting started
-          </a>
           <a href="#questions" onClick={close}>
             FAQ
           </a>
+          <a href={REPO} target="_blank" rel="noreferrer" onClick={close}>
+            GitHub
+          </a>
         </nav>
-        <a href="/terminal" className="nav-launch">
+        <a href="/terminal" className="button nav-launch">
           Launch terminal
-          <Icon name="arrow" size={15} />
         </a>
         <button
           className="home-menu"
           aria-label="Toggle navigation"
           aria-expanded={menu}
           aria-controls="mobile-menu-content"
-          onClick={() => setMenu((v) => !v)}
+          onClick={() => setMenu((open) => !open)}
         >
           {menu ? <Icon name="close" /> : <span aria-hidden="true">☰</span>}
         </button>
       </header>
-      <div className="home-market-strip">
-        <div className="market-strip-inner">
-          <span className="strip-feed">
-            <i />
-            {feedLabel}
-          </span>
-          {["AAPL", "NVDA", "MSFT", "AMZN", "GOOGL"].map((symbol) => {
-            const q = quotes.find((q) => q.symbol === symbol);
-            return (
-              <a
-                className="strip-quote"
-                href={"/terminal?symbol=" + symbol}
-                key={symbol}
-              >
-                <b>{symbol}</b>
-                <span>
-                  {q && new Date(q.asOf).getTime() > 0 ? money(q.price) : "—"}
-                </span>
-              </a>
-            );
-          })}
-        </div>
-      </div>
+
       <main id="home-main">
-        <section className="broker-hero">
-          <div className="broker-hero-inner">
-            <div className="broker-introduction">
-              <span className="home-eyebrow">PAPER TRADING</span>
-              <h1>
-                Practice trading <br />
-                with virtual funds.
-              </h1>
-              <p>
-                $100,000 in virtual buying power. Place market and limit orders,
-                track your positions, and review every execution.
-              </p>
-              <div className="hero-actions">
-                <a className="home-cta" href="/terminal?setup=1">
-                  Open practice account
-                  <Icon name="chevron" size={15} />
-                </a>
-                <a className="home-secondary" href="/terminal">
-                  Explore the terminal
-                </a>
-              </div>
-              <div className="hero-fine">
-                No real money or brokerage account required.
-              </div>
-            </div>
-            <div className="broker-product">
-              <div className="product-label">
-                <span>PaperTrader Terminal</span>
-                <span>Platform preview</span>
-              </div>
-              <a
-                className="terminal-preview"
-                href="/terminal"
-                aria-label="Open the trading terminal"
-              >
-                <img
-                  src="/terminal-preview.png"
-                  alt="Trading terminal showing a watchlist, price chart, order ticket, and portfolio positions"
-                  width="1440"
-                  height="1148"
-                />
-              </a>
-              <p className="preview-caption">
-                Illustrative terminal view. Prices and balances shown are
-                simulated.
-              </p>
-            </div>
-          </div>
-        </section>
-        <div className="broker-specifications">
-          <div>
-            <span>Starting balance</span>
-            <strong>$100,000 virtual</strong>
-          </div>
-          <div>
-            <span>Markets</span>
-            <strong>12 US equities</strong>
-          </div>
-          <div>
-            <span>Order types</span>
-            <strong>Market and limit</strong>
-          </div>
-          <div>
-            <span>Account tools</span>
-            <strong>Positions, P&L, trade history</strong>
-          </div>
-        </div>
-        <section id="markets" className="broker-section market-overview">
-          <div className="market-content">
-            <div className="section-title">
-              <h2>Market overview</h2>
-              <span
-                className={
-                  "market-feed " + (mode === "unavailable" ? "offline" : "")
-                }
-              >
-                <i />
-                {feedLabel}
-              </span>
-            </div>
-            <p className="section-description">
-              Select an instrument to open its chart and order ticket.
-            </p>
-            <div className="broker-market-table">
-              <table aria-label="Available market quotes">
-                <thead>
-                  <tr>
-                    <th>Instrument</th>
-                    <th>Last price</th>
-                    <th>Quote time</th>
-                    <th>
-                      <span className="sr-only">Open instrument</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(names).map(([symbol, name]) => {
-                    const q = quotes.find((q) => q.symbol === symbol);
-                    const valid = q && new Date(q.asOf).getTime() > 0;
-                    return (
-                      <tr key={symbol}>
-                        <td>
-                          <a
-                            className="home-quote"
-                            href={"/terminal?symbol=" + symbol}
-                          >
-                            <b>{symbol}</b>
-                            <small>{name}</small>
-                          </a>
-                        </td>
-                        <td className="market-price">
-                          {valid ? money(q.price) : "—"}
-                        </td>
-                        <td className="quote-time">
-                          {valid
-                            ? new Date(q.asOf).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                second: "2-digit",
-                              })
-                            : "—"}
-                        </td>
-                        <td>
-                          <a
-                            className="quote-action"
-                            href={"/terminal?symbol=" + symbol}
-                            aria-label={"Open " + symbol + " in terminal"}
-                          >
-                            <span>View</span>
-                            <Icon name="chevron" size={13} />
-                          </a>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p className="market-footnote">
-              Displayed prices are for this practice environment. Check the feed
-              label before placing an order.
-            </p>
-          </div>
-          <aside className="account-access">
-            <Icon name="wallet" size={25} />
-            <h3>Your practice account</h3>
+        <section className="hero">
+          <div className="hero-copy">
+            <h1>Paper trading on a real order book.</h1>
             <p>
-              Start with virtual funds and access the full trading workspace.
+              PaperTrader is a stock exchange simulator. Your orders match
+              against other traders on price and time, and a simulated market
+              maker takes the rest. Fills can be partial, limit orders rest in
+              the book, and every trade is audited.
             </p>
-            <ul>
-              <li>Market and limit orders</li>
-              <li>Position and P&L tracking</li>
-              <li>A record of every execution</li>
-            </ul>
-            <a className="home-cta" href="/terminal?setup=1">
-              Create practice account
-              <Icon name="chevron" size={14} />
-            </a>
-            <div className="returning-account">
-              <span>Already have an account?</span>
-              <a href="/terminal">
-                Continue to terminal
-                <Icon name="arrow" size={13} />
+            <div className="hero-actions">
+              <a className="button primary" href="/terminal?setup=1">
+                Open practice account
+              </a>
+              <a className="button" href="/terminal">
+                Explore the terminal
               </a>
             </div>
-          </aside>
+            <p className="hero-fine">
+              $100,000 in virtual cash. No sign-up, no real money.
+            </p>
+          </div>
+          <Demo onTrade={() => setTrades((count) => count + 1)} />
         </section>
-        <section id="platform" className="broker-platform">
-          <div className="broker-section">
-            <div className="section-heading-row">
-              <div>
-                <span className="home-eyebrow">HOW IT WORKS</span>
-                <h2>What happens when you place an order.</h2>
+
+        <Record events={events} ledger={ledger} />
+
+        <section id="internals" className="home-section">
+          <div className="section-head">
+            <h2>How it works</h2>
+            <p>
+              A Spring Boot matching engine on PostgreSQL, with a React
+              terminal. The code for each part is one click away.
+            </p>
+          </div>
+          <dl className="internals">
+            {internals.map(([title, text, label, href]) => (
+              <div key={title}>
+                <dt>{title}</dt>
+                <dd>{text}</dd>
+                <dd className="source">
+                  <a href={href} target="_blank" rel="noreferrer">
+                    {label} ↗
+                  </a>
+                </dd>
               </div>
-              <a href="/terminal" className="home-text-link">
-                View the terminal
-                <Icon name="arrow" size={15} />
-              </a>
-            </div>
-            <div className="broker-features">
-              {[
-                [
-                  "Limit order matching",
-                  "Resting orders sit in an in-memory book per symbol. Each new quote fills the ones it crosses, best price first, then oldest first.",
-                  "chart",
-                ],
-                [
-                  "One transaction per fill",
-                  "Cash, the position, the order and the trade record change together or not at all, under a row lock on the account.",
-                  "activity",
-                ],
-                [
-                  "Pushed after commit",
-                  "Quotes and fills reach every open tab over a STOMP WebSocket, sent only once the database transaction has committed.",
-                  "wallet",
-                ],
-              ].map(([title, text, icon]) => (
-                <article key={title}>
-                  <Icon name={icon} size={23} />
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-        <section id="how-it-works" className="broker-section broker-how">
-          <div className="section-heading-row">
-            <div>
-              <span className="home-eyebrow">GETTING STARTED</span>
-              <h2>Open an account and place a practice order.</h2>
-            </div>
-          </div>
-          <ol>
-            {[
-              [
-                "Create your account",
-                "Choose a practice account name. Your virtual starting balance is available immediately.",
-              ],
-              [
-                "Select an instrument",
-                "Open a chart from the market list and enter the quantity and order type.",
-              ],
-              [
-                "Review your activity",
-                "Track your order status and review the impact on your positions and buying power.",
-              ],
-            ].map(([title, text], i) => (
-              <li key={title}>
-                <span>{i + 1}</span>
-                <div>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </div>
-              </li>
             ))}
-          </ol>
+          </dl>
         </section>
-        <section id="questions" className="broker-section broker-faq">
-          <div>
-            <span className="home-eyebrow">SUPPORT</span>
-            <h2>Frequently asked questions</h2>
-            <p>About the practice account and how orders are simulated.</p>
+
+        <Markets />
+
+        <section id="questions" className="home-section">
+          <div className="section-head">
+            <h2>Questions</h2>
           </div>
           <div className="faq-list">
-            {faqs.map(([q, a]) => (
-              <details key={q}>
-                <summary>
-                  <span>{q}</span>
-                  <span className="faq-plus" aria-hidden="true">
-                    +
-                  </span>
-                </summary>
-                <p>{a}</p>
+            {faqs.map(([question, answer]) => (
+              <details key={question}>
+                <summary>{question}</summary>
+                <p>{answer}</p>
               </details>
             ))}
           </div>
         </section>
-        <div className="broker-final">
-          <div>
-            <h2>Start with a practice account.</h2>
-            <p>
-              Use virtual funds to become familiar with the trading workflow.
-            </p>
-          </div>
-          <a className="home-cta" href="/terminal?setup=1">
-            Open practice account
-            <Icon name="chevron" size={15} />
-          </a>
-        </div>
       </main>
+
       <footer className="home-footer">
-        <div className="footer-main">
-          <div>
-            <a href="/" className="home-brand">
-              <Icon name="chart" size={25} />
-              <strong>PaperTrader</strong>
-            </a>
-            <p>A local paper-trading simulator.</p>
-          </div>
-          <nav aria-label="Footer navigation">
-            <a href="/terminal">Terminal</a>
-            <a href="#markets">Markets</a>
-            <a href="#how-it-works">Getting started</a>
-            <a href="#questions">FAQ</a>
-            <a
-              href="https://github.com/nishantshah0/paper-trader"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Source code ↗
-            </a>
-          </nav>
-        </div>
-        <div className="footer-disclosure">
-          <p>
-            PaperTrader is a simulation. No real funds are held and no orders
-            are sent to a brokerage. Fills do not model slippage, liquidity, or
-            commissions. Practice results do not predict real-market
-            performance.
-          </p>
-          <p>
-            Practice accounts are shared in this demo. Account IDs are not
-            private credentials.
-          </p>
-        </div>
+        <nav aria-label="Footer navigation">
+          <a href="/terminal">Terminal</a>
+          <a href={REPO} target="_blank" rel="noreferrer">
+            Source code
+          </a>
+          <a
+            href={REPO + "/blob/main/docs/architecture.md"}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Architecture notes
+          </a>
+          <a href="/api/ledger">Ledger audit</a>
+        </nav>
+        <p>
+          PaperTrader is a simulation. No real funds are held and no orders are
+          sent to a brokerage. Practice accounts are shared in this demo, and an
+          account ID is not a private credential. Results here do not predict
+          real-market performance.
+        </p>
       </footer>
     </div>
   );
