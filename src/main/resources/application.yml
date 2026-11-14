@@ -28,6 +28,9 @@ papertrader:
     mode: ${FEED_MODE:demo}
     api-key: ${FINNHUB_API_KEY:}
     interval-ms: ${FEED_INTERVAL_MS:15000}
+    # fixes the demo feed's random walk so a run's prices can be replayed; blank picks
+    # a seed and logs it
+    seed: ${FEED_SEED:}
   house:
     # the simulated market maker quotes this far either side of the feed price, in
     # basis points across the whole spread; users can trade inside it with each other

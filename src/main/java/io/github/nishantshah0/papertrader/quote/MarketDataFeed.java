@@ -3,6 +3,7 @@ package io.github.nishantshah0.papertrader.quote;
 import io.github.nishantshah0.papertrader.PaperTraderProperties;
 import java.math.BigDecimal;
 import java.net.http.HttpClient;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -27,10 +28,18 @@ public class MarketDataFeed {
     private final ApplicationEventPublisher events;
     private final String apiKey;
     private final RestClient client;
-    private final DemoWalk walk = new DemoWalk(new Random());
+    private final DemoWalk walk;
 
+    // seed fixes the demo feed's random walk, so a run can be replayed with the same
+    // prices. Left blank, the feed picks one and logs it, so any run can be replayed.
     MarketDataFeed(QuoteCache quotes, PaperTraderProperties properties, ApplicationEventPublisher events,
-            @Value("${papertrader.feed.api-key:}") String apiKey) {
+            @Value("${papertrader.feed.api-key:}") String apiKey,
+            @Value("${papertrader.feed.seed:}") String seed) {
+        long chosen = seed == null || seed.isBlank() ? new SecureRandom().nextLong() : parseSeed(seed);
+        this.walk = new DemoWalk(new Random(chosen));
+        if (quotes.mode().equals("demo")) {
+            log.info("Demo feed seed {} (set FEED_SEED to replay these prices)", chosen);
+        }
         this.quotes = quotes;
         this.properties = properties;
         this.events = events;
@@ -66,6 +75,14 @@ public class MarketDataFeed {
                 // and execution refuses stale prices rather than falling back to seed prices
                 log.warn("Quote refresh failed for {} ({})", symbol, e.getClass().getSimpleName());
             }
+        }
+    }
+
+    private static long parseSeed(String seed) {
+        try {
+            return Long.parseLong(seed.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("feed seed must be a whole number, got " + seed);
         }
     }
 
