@@ -34,7 +34,12 @@ class OrderExecution {
         }
     }
 
-    record Result(Order order, List<BookChange> changes) {
+    // takerShares is how many shares the order filled as the taker in this transaction:
+    // what moves the price afterwards. Zero for a cancel, a quote-driven fill or a retry.
+    record Result(Order order, List<BookChange> changes, int takerShares) {
+        Result(Order order, List<BookChange> changes) {
+            this(order, changes, 0);
+        }
     }
 
     // thrown when a resting order in the book no longer matches its row; the engine
@@ -51,17 +56,19 @@ class OrderExecution {
     private final PositionRepository positions;
     private final HousePositionRepository house;
     private final OrderEventRepository eventLog;
+    private final PriceImpact impact;
     private final ApplicationEventPublisher events;
 
     OrderExecution(AccountRepository accounts, OrderRepository orders, TradeRepository trades,
             PositionRepository positions, HousePositionRepository house, OrderEventRepository eventLog,
-            ApplicationEventPublisher events) {
+            PriceImpact impact, ApplicationEventPublisher events) {
         this.accounts = accounts;
         this.orders = orders;
         this.trades = trades;
         this.positions = positions;
         this.house = house;
         this.eventLog = eventLog;
+        this.impact = impact;
         this.events = events;
     }
 
@@ -106,8 +113,10 @@ class OrderExecution {
         Order order = type == OrderType.LIMIT
                 ? Order.limit(accountId, symbol, request.side(), request.quantity(), request.limitPrice())
                 : Order.market(accountId, symbol, request.side(), request.quantity());
-        // a market buy fills at the house ask or better, so that bounds what it can cost
-        BigDecimal worstPrice = type == OrderType.LIMIT ? order.getLimitPrice() : house.priceFor(order.getSide());
+        // a market buy pays at most the house's price for its whole size, so that bounds
+        // what it can cost
+        BigDecimal worstPrice = type == OrderType.LIMIT ? order.getLimitPrice()
+                : impact.fillPrice(house, order.getSide(), order.getQuantity());
         checkAvailable(account, order, worstPrice);
         order.setIdempotencyKey(key);
         orders.save(order);
@@ -134,8 +143,13 @@ class OrderExecution {
             changes.add(new BookChange.Reduce(maker.getId(), fill.quantity()));
             publish(maker);
         }
-        if (order.isOpen() && house != null && order.crosses(house.priceFor(order.getSide()))) {
-            settle(account, order, order.remainingQuantity(), house.priceFor(order.getSide()), null);
+        // the house prices what is left by its size, and a limit order takes only the
+        // shares that price keeps within its limit
+        if (order.isOpen() && house != null) {
+            int shares = impact.fillable(house, order.getSide(), order.getLimitPrice(), order.remainingQuantity());
+            if (shares > 0) {
+                settle(account, order, shares, impact.fillPrice(house, order.getSide(), shares), null);
+            }
         }
         if (order.isOpen()) {
             if (type == OrderType.LIMIT) {
@@ -146,7 +160,7 @@ class OrderExecution {
             }
         }
         publish(order);
-        return new Result(order, changes);
+        return new Result(order, changes, order.getFilledQuantity());
     }
 
     // An order refused before it was placed rolls back its own transaction, so the
@@ -158,7 +172,8 @@ class OrderExecution {
         }
     }
 
-    // A resting order the house quote now crosses fills in full at the house price.
+    // A resting order the house quote now crosses fills in full at the touch price: it was
+    // resting, so the house came to it, and it pays nothing for size.
     @Transactional
     public Result fillAgainstHouse(RestingOrder resting, HouseQuote house) {
         long orderId = resting.id();

@@ -32,6 +32,14 @@ papertrader:
     # the simulated market maker quotes this far either side of the feed price, in
     # basis points across the whole spread; users can trade inside it with each other
     spread-bps: ${HOUSE_SPREAD_BPS:10}
+    # price impact: trading depth-shares moves the price impact-bps, and size costs grow
+    # with the square root of the shares (see PriceImpact). The lean fades by
+    # impact-decay on each quote tick. The house also leans its quotes up to
+    # imbalance-bps towards whichever side has more resting orders near the price.
+    impact-bps: ${HOUSE_IMPACT_BPS:10}
+    depth-shares: ${HOUSE_DEPTH_SHARES:500}
+    impact-decay: ${HOUSE_IMPACT_DECAY:0.25}
+    imbalance-bps: ${HOUSE_IMBALANCE_BPS:4}
   starting-cash: 100000.00
   # Demo reference prices; live mode will not execute against these seeds
   seed-quotes:

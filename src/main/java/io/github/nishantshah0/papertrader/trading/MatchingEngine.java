@@ -45,23 +45,32 @@ public class MatchingEngine {
     private final OrderRepository orders;
     private final OrderExecution execution;
     private final QuoteCache quotes;
+    private final PriceImpact impact;
     private final int spreadBps;
 
-    MatchingEngine(OrderRepository orders, OrderExecution execution, QuoteCache quotes,
+    MatchingEngine(OrderRepository orders, OrderExecution execution, QuoteCache quotes, PriceImpact impact,
             @Value("${papertrader.house.spread-bps:10}") int spreadBps) {
         this.orders = orders;
         this.execution = execution;
         this.quotes = quotes;
+        this.impact = impact;
         this.spreadBps = spreadBps;
         HouseQuote.around(BigDecimal.ONE, spreadBps); // fail at startup on a bad spread
     }
 
-    public record BookView(String symbol, HouseQuote house, List<Level> bids, List<Level> asks) {
+    // feed is the price the house leans away from; flowBps and bookBps are how far recent
+    // trading and the resting orders lean it, so its mid is feed * (1 + (flow + book) / 10000)
+    public record BookView(String symbol, HouseQuote house, List<Level> bids, List<Level> asks, BigDecimal feed,
+            double flowBps, double bookBps) {
     }
 
     private static final class Matcher {
         final OrderBook book;
         final ExecutorService thread;
+        // how far recent trading has pushed the house's mid from the feed price, in basis
+        // points. Only the matcher's own thread reads or writes it; it starts at zero and
+        // fades back there, so it is not stored.
+        double pressureBps;
 
         Matcher(String symbol) {
             this.book = new OrderBook(symbol);
@@ -87,15 +96,7 @@ public class MatchingEngine {
         return call(symbol, () -> {
             Matcher matcher = matcher(symbol);
             try {
-                try {
-                    return apply(matcher, execution.place(accountId, request, key, symbol, matcher.book,
-                            house(symbol)));
-                } catch (BookOutOfSyncException e) {
-                    log.warn("{} book out of sync, reloading before retrying ({})", symbol, e.getMessage());
-                    reload(symbol);
-                    return apply(matcher, execution.place(accountId, request, key, symbol, matcher.book,
-                            house(symbol)));
-                }
+                return apply(matcher, placeOnce(accountId, request, key, symbol, matcher));
             } catch (OrderRejectedException e) {
                 // still on the symbol's thread, so the refusal takes its place in the log
                 try {
@@ -104,12 +105,30 @@ public class MatchingEngine {
                     log.warn("Could not log a refused {} order ({})", symbol, logFailure.getClass().getSimpleName());
                 }
                 throw e;
+            } finally {
+                sweep(symbol); // the order may have moved the house's quote through resting orders
             }
         });
     }
 
+    private Result placeOnce(Long accountId, PlaceOrderRequest request, String key, String symbol, Matcher matcher) {
+        try {
+            return execution.place(accountId, request, key, symbol, matcher.book, house(symbol));
+        } catch (BookOutOfSyncException e) {
+            log.warn("{} book out of sync, reloading before retrying ({})", symbol, e.getMessage());
+            reload(symbol);
+            return execution.place(accountId, request, key, symbol, matcher.book, house(symbol));
+        }
+    }
+
     public Order cancel(Long accountId, Long orderId, String symbol) {
-        return call(symbol, () -> apply(matcher(symbol), execution.cancel(accountId, orderId)));
+        return call(symbol, () -> {
+            try {
+                return apply(matcher(symbol), execution.cancel(accountId, orderId));
+            } finally {
+                sweep(symbol); // a cancel changes the book the house leans on
+            }
+        });
     }
 
     // fills one resting order against the current house quote, if it crosses
@@ -129,6 +148,8 @@ public class MatchingEngine {
     @EventListener
     public void onQuote(Quote quote) {
         submit(quote.symbol(), () -> {
+            Matcher matcher = matcher(quote.symbol());
+            matcher.pressureBps = impact.decayed(matcher.pressureBps);
             sweep(quote.symbol());
             return null;
         });
@@ -136,9 +157,11 @@ public class MatchingEngine {
 
     public BookView book(String symbol, int levels) {
         return call(symbol, () -> {
-            OrderBook book = matcher(symbol).book;
-            return new BookView(symbol, house(symbol), book.depth(OrderSide.BUY, levels),
-                    book.depth(OrderSide.SELL, levels));
+            Matcher matcher = matcher(symbol);
+            Quote feed = quotes.get(symbol).orElse(null);
+            return new BookView(symbol, house(symbol), matcher.book.depth(OrderSide.BUY, levels),
+                    matcher.book.depth(OrderSide.SELL, levels), feed == null ? null : feed.price(),
+                    round(matcher.pressureBps), feed == null ? 0 : round(bookLean(matcher, feed)));
         });
     }
 
@@ -177,6 +200,24 @@ public class MatchingEngine {
         log.info("{} book loaded with {} resting limit orders", symbol, rested);
     }
 
+    // what the house would charge per share for this many shares right now, or null while
+    // the quote is stale
+    public BigDecimal housePrice(String symbol, OrderSide side, int shares) {
+        return call(symbol, () -> {
+            HouseQuote house = house(symbol);
+            return house == null ? null : impact.fillPrice(house, side, shares);
+        });
+    }
+
+    // how far the house's mid currently sits from the feed price, in basis points
+    public double leanBps(String symbol) {
+        return call(symbol, () -> {
+            Matcher matcher = matcher(symbol);
+            Quote feed = quotes.get(symbol).orElse(null);
+            return matcher.pressureBps + (feed == null ? 0 : bookLean(matcher, feed));
+        });
+    }
+
     private Order apply(Matcher matcher, Result result) {
         for (BookChange change : result.changes()) {
             switch (change) {
@@ -185,12 +226,35 @@ public class MatchingEngine {
                 case BookChange.Rest rest -> matcher.book.add(rest.order());
             }
         }
+        if (result.takerShares() > 0) {
+            matcher.pressureBps = impact.pressureAfter(matcher.pressureBps, result.order().getSide(),
+                    result.takerShares());
+        }
         return result.order();
     }
 
+    // The house quotes around the feed price, leaned by recent trading and by the resting
+    // orders near the price. Nothing while the quote is stale.
     private HouseQuote house(String symbol) {
         Quote quote = quotes.get(symbol).orElse(null);
-        return quote == null || !quotes.isTradable(quote) ? null : HouseQuote.around(quote.price(), spreadBps);
+        if (quote == null || !quotes.isTradable(quote)) {
+            return null;
+        }
+        Matcher matcher = matcher(symbol);
+        double leanBps = matcher.pressureBps + bookLean(matcher, quote);
+        BigDecimal mid = leanBps == 0 ? quote.price()
+                : quote.price().multiply(BigDecimal.valueOf(1 + leanBps / 10_000));
+        return HouseQuote.around(mid, spreadBps);
+    }
+
+    private double bookLean(Matcher matcher, Quote feed) {
+        return impact.imbalanceSkew(
+                matcher.book.sharesNear(OrderSide.BUY, feed.price(), PriceImpact.IMBALANCE_WINDOW_BPS),
+                matcher.book.sharesNear(OrderSide.SELL, feed.price(), PriceImpact.IMBALANCE_WINDOW_BPS));
+    }
+
+    private static double round(double bps) {
+        return Math.round(bps * 100) / 100.0;
     }
 
     private Matcher matcher(String symbol) {

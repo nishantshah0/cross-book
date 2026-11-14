@@ -18,6 +18,8 @@ import org.springframework.http.HttpStatus;
 // timestamp: the same position as outside market hours or just after startup. The
 // tests never contact Finnhub. AAPL stays stale throughout; MSFT gets fresh quotes.
 @SpringBootTest(properties = {
+        "papertrader.house.impact-bps=0",
+        "papertrader.house.imbalance-bps=0",
         "papertrader.feed.mode=finnhub",
         "papertrader.house.spread-bps=0",
         "papertrader.feed.api-key=test-key-not-used",

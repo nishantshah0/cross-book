@@ -144,6 +144,22 @@ export default function App() {
       current = false;
     };
   }, [symbol, quoteStamp, orders]);
+  // the house prices bigger orders further from its quote, so ask what this size costs
+  const [sizePrice, setSizePrice] = useState(null);
+  useEffect(() => {
+    const shares = Number(quantity);
+    if (!Number.isInteger(shares) || shares < 1 || shares > 1000000) {
+      setSizePrice(null);
+      return;
+    }
+    let current = true;
+    api("/book/" + symbol + "/house-price?side=" + side + "&shares=" + shares)
+      .then((r) => current && setSizePrice(r.price))
+      .catch(() => current && setSizePrice(null));
+    return () => {
+      current = false;
+    };
+  }, [symbol, side, quantity, book]);
   useEffect(() => {
     setPortfolio(null);
     setOrders([]);
@@ -289,14 +305,13 @@ export default function App() {
         .toLowerCase()
         .includes(search.toLowerCase()),
     );
-  const housePrice = book?.house
-    ? side === "BUY"
-      ? book.house.ask
-      : book.house.bid
-    : selected?.price;
+  const housePrice = sizePrice ?? null;
   const estimate =
     Number(quantity) *
     (type === "LIMIT" ? Number(limit) : Number(housePrice || 0));
+  const lean = book ? book.flowBps + book.bookBps : 0;
+  const bps = (value) =>
+    (value >= 0 ? "+" : "") + Number(value).toFixed(1) + " bps";
   // shares not already promised to an open sell limit
   const held =
     portfolio?.positions.find((p) => p.symbol === symbol)?.availableQuantity ||
@@ -842,7 +857,13 @@ export default function App() {
             ))}
             <p className="book-note">
               {book?.house
-                ? "Click a price to use it as your limit. The house trades any size at its quote."
+                ? "The house is " +
+                  bps(lean) +
+                  " from the feed price: " +
+                  bps(book.flowBps) +
+                  " from recent trading, " +
+                  bps(book.bookBps) +
+                  " from resting orders. Bigger orders cost more per share. Click a price to use it as your limit."
                 : "The quote is stale, so the house is out. Traders can still trade with each other."}
             </p>
           </section>
@@ -928,7 +949,7 @@ export default function App() {
               </div>
               <div className="order-summary">
                 <div>
-                  <span>{side === "BUY" ? "House ask" : "House bid"}</span>
+                  <span>House price per share</span>
                   <b>{housePrice ? money(housePrice) : "—"}</b>
                 </div>
                 <div>

@@ -31,6 +31,8 @@ import tools.jackson.core.type.TypeReference;
 // asks 50.25. Orders posted inside that gap trade with other users first. Each test
 // uses its own symbol so resting orders from one test never meet another.
 @SpringBootTest(properties = {
+        "papertrader.house.impact-bps=0",
+        "papertrader.house.imbalance-bps=0",
         "papertrader.feed.mode=static",
         "papertrader.house.spread-bps=100",
         "papertrader.starting-cash=10000.00",

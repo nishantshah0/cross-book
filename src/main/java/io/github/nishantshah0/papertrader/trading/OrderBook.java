@@ -79,8 +79,8 @@ public class OrderBook {
 
     // The resting orders an incoming order would trade with, best price first and oldest
     // first within a price. It stops at its own limit (null for a market order), and at
-    // the first level the house beats: the house takes any size, so no taker should pay
-    // a user more than the house asks. At an equal price the user goes first.
+    // the first level the house beats at its touch price, so no taker pays a user more
+    // than the house asks. At an equal price the user goes first.
     public List<PlannedFill> match(OrderSide side, BigDecimal limit, int quantity, long accountId,
             HouseQuote house) {
         BigDecimal housePrice = house == null ? null : house.priceFor(side);
@@ -126,6 +126,22 @@ public class OrderBook {
             }
             into.addAll(level.values());
         }
+    }
+
+    // resting shares on one side priced within `windowBps` of the reference price
+    public long sharesNear(OrderSide side, BigDecimal reference, double windowBps) {
+        double ref = reference.doubleValue(), band = ref * windowBps / 10_000;
+        long shares = 0;
+        for (var level : levels(side).entrySet()) {
+            if (Math.abs(level.getKey().doubleValue() - ref) > band) {
+                if (side == OrderSide.BUY ? level.getKey().doubleValue() < ref : level.getKey().doubleValue() > ref) {
+                    break; // sorted best first, so every level past this one is further away
+                }
+                continue; // priced through the reference: not resting near it
+            }
+            shares += level.getValue().values().stream().mapToLong(RestingOrder::remaining).sum();
+        }
+        return shares;
     }
 
     // aggregated price levels for display, best first

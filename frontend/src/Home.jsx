@@ -33,6 +33,12 @@ const internals = [
     SOURCE + "trading/OrderExecution.java",
   ],
   [
+    "Price impact",
+    "Bigger orders cost more per share, following the square-root law, and every trade moves the price, which then fades back. The market maker also leans towards whichever side has more resting orders, so fake orders can move prices.",
+    "PriceImpact.java",
+    SOURCE + "trading/PriceImpact.java",
+  ],
+  [
     "Ledger audit",
     "The house keeps its own books, so no money or shares can appear or disappear. An audit rebuilds every balance from its trades, and runs after every integration test.",
     "LedgerAudit.java",
@@ -59,7 +65,7 @@ const faqs = [
   ],
   [
     "Who is on the other side of my trade?",
-    "Another practice account, when its resting order beats the house. Otherwise the house: a simulated market maker that quotes a bid and an ask around the feed price and trades any size.",
+    "Another practice account, when its resting order beats the house. Otherwise the house: a simulated market maker that quotes a bid and an ask around the feed price. It charges more per share for bigger orders, and its prices move with the trading.",
   ],
   [
     "What happens to my limit order?",
@@ -75,7 +81,7 @@ const faqs = [
   ],
   [
     "How close is this to real trading?",
-    "There is a real order book, partial fills and a spread. But fills are whole shares, there is no shorting, commissions or corporate actions, and the house trades any size. Results here don't predict real-market performance.",
+    "There is a real order book, partial fills and a spread. But fills are whole shares, there is no shorting, commissions or corporate actions, and the house's size costs follow a simple model. Results here don't predict real-market performance.",
   ],
 ];
 

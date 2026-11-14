@@ -71,16 +71,24 @@ Each symbol has two sources of liquidity:
 | Source           | Prices                                                                                                    | Size                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- | --------------------- |
 | **Other users**  | Their resting limit orders                                                                                | What they posted      |
-| **The house**    | A bid and an ask either side of the feed price, 10 basis points apart by default (`HOUSE_SPREAD_BPS`)     | Unlimited             |
+| **The house**    | A bid and an ask either side of the feed price, 10 basis points apart by default (`HOUSE_SPREAD_BPS`)     | Any, priced by size   |
 
 An incoming order:
 
 1. Trades with resting user orders, best price first and oldest first within a price, at each resting order's limit.
 2. Stops at its own limit, or at any level where the house offers a better price. At an equal price the user goes first.
-3. Trades whatever is left with the house, if the house price is within its limit.
+3. Trades whatever is left with the house, which charges more per share for more shares. A limit order takes only the shares whose price stays within its limit.
 4. If shares are still left, a limit order **rests in the book, partly filled**. A market order always fills completely.
 
-Users meet inside the spread; an order priced through the house trades with the house. When the feed moves, resting orders the new house quote crosses fill in full at the house price. An order that would trade with the same account's resting order is refused.
+Users meet inside the spread; an order priced through the house trades with the house. When the house's quote moves, resting orders it crosses fill in full at its price. An order that would trade with the same account's resting order is refused.
+
+### Prices move with trading
+
+The house is a market maker, not a bottomless wall of liquidity:
+
+- **Size costs more.** A fill of *q* shares costs the house's quote plus `HOUSE_IMPACT_BPS` × √(*q* / `HOUSE_DEPTH_SHARES`) basis points, the square-root law real market impact follows. By default, 500 shares cost 10 basis points more, and 2,000 shares cost 20.
+- **Trading moves the price.** After an order trades, the house's quote moves the same distance in the direction of the trade, then fades back towards the feed price by `HOUSE_IMPACT_DECAY` on every quote tick. You pay the impact before the price moves, so buying and immediately selling back always loses money, however the order is sized or split. A unit test checks exactly that.
+- **The book leans the quote.** The house shifts its quote up to `HOUSE_IMBALANCE_BPS` towards whichever side has more resting orders within 0.25% of the price, as real market makers read order book imbalance. That makes spoofing possible: a large bid that is never meant to fill lifts the price a seller gets. An integration test shows the spoofer selling 4 basis points higher than an honest seller.
 
 <details>
 <summary><b>Worked example</b></summary>
@@ -343,6 +351,7 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | DELETE | `/api/accounts/{id}/orders/{orderId}`   | Cancel an open order                       |
 | GET    | `/api/accounts/{id}/trades`             | Fills, newest first                        |
 | GET    | `/api/book/{symbol}`                    | Top 10 price levels and the house quote    |
+| GET    | `/api/book/{symbol}/house-price?side=&shares=` | The house's price per share for a size |
 | GET    | `/api/quotes`, `/api/quotes/{symbol}`   | Cached quotes and timestamps               |
 | GET    | `/api/quotes/status`                    | Feed mode                                  |
 | GET    | `/api/quotes/history`                   | Up to 240 recent quotes per symbol         |
@@ -377,7 +386,7 @@ Leave out `type` and `limitPrice` for a market order.
 
 ## What I'd do next
 
-- **A finite house.** Give the market maker a displayed size per tick, so large orders walk the book and the spread moves with demand.
+- **Simulated traders.** Hundreds of bots, some honest and some manipulating the market, with a surveillance system that tries to catch the cheaters.
 - **More order types.** Stop orders, time-in-force (IOC, FOK, day) and amend-in-place.
 - **Persist quote history.** Chart history lives in memory and resets on restart.
 - **Authentication**, so it can be hosted publicly.

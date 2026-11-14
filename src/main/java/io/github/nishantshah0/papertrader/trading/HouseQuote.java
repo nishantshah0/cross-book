@@ -3,10 +3,11 @@ package io.github.nishantshah0.papertrader.trading;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-// The simulated market maker. It quotes a bid and an ask either side of the feed price
-// and takes any size at those prices, so a market order always fills. Users who post
-// inside the spread get filled by each other first; whatever is left trades here.
-// Prices round outward to four decimals, so the spread is never negative.
+// The simulated market maker's touch: the bid and ask either side of its mid. A market
+// order always fills against it, and PriceImpact prices larger fills further from the
+// touch. Users who post inside the spread get filled by each other first; whatever is
+// left trades here. Prices round outward to four decimals, so the spread is never
+// negative.
 public record HouseQuote(BigDecimal bid, BigDecimal ask) {
 
     private static final BigDecimal BASIS_POINTS_BOTH_SIDES = BigDecimal.valueOf(20_000);

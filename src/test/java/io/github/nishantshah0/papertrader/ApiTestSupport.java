@@ -20,10 +20,12 @@ import org.springframework.test.web.servlet.assertj.MvcTestResult;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
-// a small balance, round prices and a zero house spread keep the arithmetic in the
-// assertions obvious: the house buys and sells at exactly the quote
+// a small balance, round prices, a zero house spread and no price impact keep the
+// arithmetic in the assertions obvious: the house trades any size at exactly the quote
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest(properties = {
+        "papertrader.house.impact-bps=0",
+        "papertrader.house.imbalance-bps=0",
         "papertrader.feed.mode=static",
         "papertrader.house.spread-bps=0",
         "papertrader.starting-cash=1000.00",

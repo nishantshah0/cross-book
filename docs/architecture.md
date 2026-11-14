@@ -31,11 +31,23 @@ The quote feed runs on Spring's scheduler, independently of browser connections.
 Two kinds of liquidity meet in each book:
 
 - **Other users.** Limit orders that do not fill straight away rest in the book and wait for a counterparty.
-- **The house**, a simulated market maker. It quotes a bid and an ask either side of the feed price (`papertrader.house.spread-bps`, 10 basis points across the spread by default) and takes any size at those prices, so a market order always fills and a single user can trade alone.
+- **The house**, a simulated market maker. It quotes a bid and an ask either side of the feed price (`papertrader.house.spread-bps`, 10 basis points across the spread by default) and fills any size, charging more per share for bigger orders (see Price impact below), so a market order always fills and a single user can trade alone.
 
-An incoming order walks the opposite side of the book best price first, oldest first within a price, and trades at each resting order's limit. It stops at its own limit, and at the first level the house beats: the house takes any size, so paying a user more than the house asks would be a bad fill. At an equal price the user goes first. Whatever is left trades with the house if its price is within the limit; a limit order with shares still left rests, partly filled. A market order is refused while the quote is stale, because there is no house price to bound what it could cost.
+An incoming order walks the opposite side of the book best price first, oldest first within a price, and trades at each resting order's limit. It stops at its own limit, and at the first level the house beats at its touch price, so no taker pays a user more than the house asks. At an equal price the user goes first. Whatever is left trades with the house, priced by size, and a limit order takes only the shares that price keeps within its limit; a limit order with shares still left rests, partly filled. A market order is refused while the quote is stale, because there is no house price to bound what it could cost.
 
-Every quote also moves the house. Resting bids at or above the new house ask, and asks at or below the new house bid, fill in full at the house price.
+Every quote also moves the house, and so does every placement and cancel, because those change the house's lean. Resting bids at or above the new house ask, and asks at or below the new house bid, fill in full at the house's touch price: they were resting, so the house came to them and they pay nothing for size.
+
+## Price impact
+
+`PriceImpact` holds the model, and the matcher applies it. All three effects are in basis points:
+
+- **Size.** The house fills *q* shares at its touch price moved against the taker by `impact-bps` × √(*q* / `depth-shares`), rounded against the taker to four decimals, and capped at 50%. A limit order takes the largest number of shares whose price stays within the limit, worked out from the square root and then corrected for rounding.
+- **Flow.** Each matcher keeps a pressure figure for its symbol. After an order commits, it moves by the impact of the shares the taker filled, in the taker's direction, capped at ±5%. Each quote tick multiplies it by 1 − `impact-decay`. It lives in memory: it starts at zero, fades back to zero, and is lost on restart. Quote-driven fills of resting orders do not move it, which stops a falling price from cascading through resting bids.
+- **Book.** The house leans by `imbalance-bps` × (bids − asks) / (bids + asks), counting resting shares within 25 basis points of the feed price.
+
+The house's mid is the feed price × (1 + (flow + book) / 10,000), and its bid and ask sit half the spread either side. The taker pays the size cost before the price moves, so a round trip against the house always loses: a unit test tries sizes from 1 to 1,000,000 shares, split into as many as 20 orders, and none makes money. The book lean is the one deliberate weakness, because real markets have it: an integration test shows a spoofer's fake bid lifting the price it sells at by 4 basis points.
+
+The integration tests that check exact prices run with impact and imbalance set to zero, so the house trades any size at exactly its quote. `PriceImpactApiTest` runs with them on.
 
 Users can only meet inside the spread: an order priced through the house trades with the house first. With a zero spread every order trades with the house, which is how the integration tests keep their arithmetic exact.
 

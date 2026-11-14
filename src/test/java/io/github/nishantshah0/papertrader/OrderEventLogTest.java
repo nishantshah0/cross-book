@@ -24,6 +24,8 @@ import tools.jackson.core.type.TypeReference;
 // Quotes at 50.00 with a 1% house spread: the house bids 49.75 and asks 50.25, so
 // orders inside that gap trade between users. Each test has its own symbol.
 @SpringBootTest(properties = {
+        "papertrader.house.impact-bps=0",
+        "papertrader.house.imbalance-bps=0",
         "papertrader.feed.mode=static",
         "papertrader.house.spread-bps=100",
         "papertrader.starting-cash=10000.00",
