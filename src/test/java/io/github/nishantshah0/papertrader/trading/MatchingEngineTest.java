@@ -47,6 +47,9 @@ class MatchingEngineTest {
         when(quotes.get("AAPL")).thenReturn(Optional.empty());
         engine = new MatchingEngine(repository, execution, quotes, 0);
         engine.rebuild();
+        // rebuild runs on the matcher thread; wait for it, so no test stubs a mock while
+        // that thread may still be calling it
+        engine.restingOrders("AAPL");
     }
 
     @AfterEach
