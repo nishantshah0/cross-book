@@ -2,11 +2,11 @@ package io.github.nishantshah0.papertrader.quote;
 
 import io.github.nishantshah0.papertrader.PaperTraderProperties;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,7 +27,7 @@ public class MarketDataFeed {
     private final ApplicationEventPublisher events;
     private final String apiKey;
     private final RestClient client;
-    private long tick;
+    private final DemoWalk walk = new DemoWalk(new Random());
 
     MarketDataFeed(QuoteCache quotes, PaperTraderProperties properties, ApplicationEventPublisher events,
             @Value("${papertrader.feed.api-key:}") String apiKey) {
@@ -53,7 +53,6 @@ public class MarketDataFeed {
         if (quotes.mode().equals("static")) {
             return;
         }
-        tick++;
         for (String symbol : quotes.symbols().stream().sorted().toList()) {
             try {
                 Quote quote = quotes.mode().equals("demo") ? demoQuote(symbol) : finnhubQuote(symbol);
@@ -70,13 +69,8 @@ public class MarketDataFeed {
         }
     }
 
-    // a bounded sine wave around the seed price, phase-shifted per symbol
     private Quote demoQuote(String symbol) {
-        double wave = Math.sin(tick * 0.35 + Math.floorMod(symbol.hashCode(), 20)) * 0.025;
-        BigDecimal price = properties.seedQuotes().get(symbol)
-                .multiply(BigDecimal.valueOf(1 + wave))
-                .setScale(4, RoundingMode.HALF_UP);
-        return new Quote(symbol, price, Instant.now());
+        return new Quote(symbol, walk.next(symbol, properties.seedQuotes().get(symbol)), Instant.now());
     }
 
     private Quote finnhubQuote(String symbol) {
