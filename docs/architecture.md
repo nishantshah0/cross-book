@@ -43,9 +43,11 @@ Every quote also moves the house, and so does every placement and cancel, becaus
 
 - **Size.** The house fills *q* shares at its touch price moved against the taker by `impact-bps` × √(*q* / `depth-shares`), rounded against the taker to four decimals, and capped at 50%. A limit order takes the largest number of shares whose price stays within the limit, worked out from the square root and then corrected for rounding.
 - **Flow.** Each matcher keeps a pressure figure for its symbol. After an order commits, it moves by the impact of the shares the taker filled, in the taker's direction, capped at ±5%. Each quote tick multiplies it by 1 − `impact-decay`. It lives in memory: it starts at zero, fades back to zero, and is lost on restart. Quote-driven fills of resting orders do not move it, which stops a falling price from cascading through resting bids.
-- **Book.** The house leans by `imbalance-bps` × (bids − asks) / (bids + asks), counting resting shares within 25 basis points of the feed price.
+- **Book.** The house leans by `imbalance-bps` × (bids − asks) / (bids + asks + `depth-shares`), counting resting shares within 25 basis points of the feed price. Including the house's own depth in the denominator scales the lean by size: with the default 500 shares of depth, a lone 1-share bid leans the price 0.008 basis points, a 500-share bid 2, and only an imbalance far larger than the depth approaches the maximum. Without it, a single share on one side would lean the house as far as any spoof.
 
-The house's mid is the feed price × (1 + (flow + book) / 10,000), and its bid and ask sit half the spread either side. The taker pays the size cost before the price moves, so a round trip against the house always loses: a unit test tries sizes from 1 to 1,000,000 shares, split into as many as 20 orders, and none makes money. The book lean is the one deliberate weakness, because real markets have it: an integration test shows a spoofer's fake bid lifting the price it sells at by 4 basis points.
+The house's mid is the feed price × (1 + (flow + book) / 10,000), and its bid and ask sit half the spread either side. The taker pays the size cost before the price moves, so a round trip against the house always loses: a unit test tries sizes from 1 to 1,000,000 shares, split into as many as 20 orders, and none makes money. The book lean is the one deliberate weakness, because real markets have it: an integration test shows a spoofer's 900-share fake bid lifting the price it sells at by 3.6 basis points, while a 1-share bid moves it by less than a tenth of a cent.
+
+The lean is capped below half the spread (4 against 5 basis points by default). So a spoofer can sell at a better price than it would have got, but it can never lift the house's bid above where the mid was before it started. On its own the house is a weak target; a spoofer's real profit has to come from other traders who read the book and react to its fake orders. The cheater bots and the book-reading bots will need tuning against that.
 
 The integration tests that check exact prices run with impact and imbalance set to zero, so the house trades any size at exactly its quote. `PriceImpactApiTest` runs with them on.
 
@@ -120,7 +122,7 @@ The browser retains a failed request's key until that payload changes or succeed
 
 ## Feed modes and failures
 
-- Demo: a random walk every 15 seconds, pulled gently back towards each symbol's configured seed price and kept within 6% of it. Clearly labeled simulated prices.
+- Demo: a random walk every 15 seconds, pulled gently back towards each symbol's configured seed price and kept within 6% of it. Clearly labeled simulated prices. `papertrader.feed.seed` (`FEED_SEED`) fixes the walk, so a run's prices can be replayed; left blank, the app picks a seed and logs it at startup. The prices replay exactly; what traders do with them still depends on timing until the simulated clock exists.
 - Static: unchanged configured prices, used by integration tests.
 - Finnhub: server-side HTTP requests with five-second connection/read timeouts. Seeds have an epoch timestamp and are never executable. Invalid, future-dated, or out-of-order quotes cannot replace good data. While a quote is older than 120 seconds the house is out: market orders are refused, and limit orders rest until a fresh quote crosses them. Users can still trade with each other.
 

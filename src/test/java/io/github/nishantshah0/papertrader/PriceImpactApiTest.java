@@ -20,7 +20,8 @@ import org.springframework.http.HttpStatus;
 
 // Every symbol is quoted at 100.00 with a 10 bps spread, so the house bids 99.95 and
 // asks 100.05. Trading 100 shares costs, and then moves the price, 20 bps; half the
-// move fades on each quote tick; the book can lean the house up to 4 bps. Each test has
+// move fades on each quote tick; the book can lean the house up to 4 bps, scaled by how
+// big the imbalance is next to those 100 shares of depth. Each test has
 // its own symbol, because the lean a test leaves behind would change the next one's prices.
 @SpringBootTest(properties = {
         "papertrader.feed.mode=static",
@@ -34,7 +35,8 @@ import org.springframework.http.HttpStatus;
         "papertrader.seed-quotes.IMB=100.00",
         "papertrader.seed-quotes.IMC=100.00",
         "papertrader.seed-quotes.IMD=100.00",
-        "papertrader.seed-quotes.IME=100.00"
+        "papertrader.seed-quotes.IME=100.00",
+        "papertrader.seed-quotes.IMF=100.00"
 })
 class PriceImpactApiTest extends ApiTestSupport {
 
@@ -112,16 +114,31 @@ class PriceImpactApiTest extends ApiTestSupport {
         Order plain = service.place(honest.id(), market(OrderSide.SELL, "IMD", 20));
 
         Order fake = service.place(spoofer.id(), limit(OrderSide.BUY, "IME", 900, "99.90"));
-        assertThat(engine.leanBps("IME")).isCloseTo(4.0, within(0.01));
+        // 4 bps * 900 / (900 + 100 depth)
+        assertThat(engine.leanBps("IME")).isCloseTo(3.6, within(0.01));
         Order spoofed = service.place(spoofer.id(), market(OrderSide.SELL, "IME", 20));
         service.cancel(spoofer.id(), fake.getId());
 
         assertThat(fake.getFilledQuantity()).isZero();
         assertThat(spoofed.getAvgFillPrice()).isGreaterThan(plain.getAvgFillPrice());
-        // 4 bps on a 100 dollar stock
+        // 3.6 bps on a 100 dollar stock
         assertThat(spoofed.getAvgFillPrice().subtract(plain.getAvgFillPrice()).doubleValue())
-                .isCloseTo(0.04, within(0.001));
+                .isCloseTo(0.036, within(0.001));
         assertThat(engine.leanBps("IME")).isLessThan(0.01); // and the lean leaves with the bid
+    }
+
+    // The same trick with a token order does next to nothing: one share is noise next to
+    // the house's depth, so spoofing has to put real size at risk.
+    @Test
+    void aOneShareBidBarelyMovesThePrice() throws Exception {
+        var trader = createAccount();
+        var before = engine.book("IMF", 5).house();
+
+        service.place(trader.id(), limit(OrderSide.BUY, "IMF", 1, "99.90"));
+
+        assertThat(engine.leanBps("IMF")).isCloseTo(4.0 / 101, within(1e-6));
+        var after = engine.book("IMF", 5).house();
+        assertThat(after.bid().subtract(before.bid()).doubleValue()).isLessThan(0.001);
     }
 
     // an account holding 50 shares, with the price settled back where it started

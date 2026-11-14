@@ -17,9 +17,11 @@ import org.springframework.stereotype.Component;
 // tick. The taker pays the impact before the price moves, so a buy followed by an
 // immediate sell back always loses money.
 //
-// Book. The house leans its mid towards the side with more resting orders near the
-// price, by up to `imbalance` basis points. Real market makers read the book the same
-// way, which is why posting orders you never mean to fill (spoofing) can pay.
+// Book. The house leans its mid towards the side with more resting shares near the
+// price, by up to `imbalance` basis points. The lean is scaled by the house's own depth,
+// so it takes orders of a size that matters to move it: a lone 1-share bid barely
+// registers. Real market makers read the book the same way, which is why posting large
+// orders you never mean to fill (spoofing) can pay.
 @Component
 public class PriceImpact {
 
@@ -117,10 +119,11 @@ public class PriceImpact {
         return pressureBps * (1 - decay);
     }
 
-    // how far the book's resting orders lean the house's mid: up when bids outweigh asks
+    // How far the book's resting orders lean the house's mid: up when bids outweigh asks.
+    // Adding the house's depth to the denominator means the lean only approaches its
+    // maximum once the imbalance is large next to the depth the house itself quotes.
     public double imbalanceSkew(long bidShares, long askShares) {
-        long total = bidShares + askShares;
-        return total == 0 ? 0 : imbalanceBps * (bidShares - askShares) / total;
+        return imbalanceBps * (bidShares - askShares) / (bidShares + askShares + depthShares);
     }
 
     private static boolean within(OrderSide side, BigDecimal price, BigDecimal limit) {

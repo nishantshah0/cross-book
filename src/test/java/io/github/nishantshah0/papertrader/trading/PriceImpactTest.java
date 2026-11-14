@@ -2,6 +2,7 @@ package io.github.nishantshah0.papertrader.trading;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
@@ -62,9 +63,21 @@ class PriceImpactTest {
 
     @Test
     void theBookLeansTheHouseTowardsTheHeavierSide() {
-        assertThat(impact.imbalanceSkew(300, 100)).isEqualTo(2.0);
-        assertThat(impact.imbalanceSkew(0, 50)).isEqualTo(-4.0);
+        // 4 bps * (300 - 100) / (300 + 100 + 100 depth)
+        assertThat(impact.imbalanceSkew(300, 100)).isCloseTo(1.6, within(1e-12));
+        assertThat(impact.imbalanceSkew(0, 50)).isCloseTo(-4.0 / 3, within(1e-12));
         assertThat(impact.imbalanceSkew(0, 0)).isZero();
+        assertThat(impact.imbalanceSkew(50, 50)).isZero();
+    }
+
+    // Size matters: one share is noise next to the house's depth, a block of shares is
+    // not, and no imbalance can lean the house more than its maximum.
+    @Test
+    void aTinyOrderBarelyLeansTheHouseAndOnlyBigOnesApproachTheMaximum() {
+        assertThat(impact.imbalanceSkew(1, 0)).isLessThan(0.04); // 4 / 101
+        assertThat(impact.imbalanceSkew(100, 0)).isEqualTo(2.0); // as deep as the house: half the maximum
+        assertThat(impact.imbalanceSkew(900, 0)).isCloseTo(3.6, within(1e-12));
+        assertThat(impact.imbalanceSkew(1_000_000, 0)).isLessThan(4.0).isGreaterThan(3.99);
     }
 
     // The property that keeps the market honest: nobody can make money by trading with

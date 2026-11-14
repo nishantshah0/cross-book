@@ -88,7 +88,7 @@ The house is a market maker, not a bottomless wall of liquidity:
 
 - **Size costs more.** A fill of *q* shares costs the house's quote plus `HOUSE_IMPACT_BPS` × √(*q* / `HOUSE_DEPTH_SHARES`) basis points, the square-root law real market impact follows. By default, 500 shares cost 10 basis points more, and 2,000 shares cost 20.
 - **Trading moves the price.** After an order trades, the house's quote moves the same distance in the direction of the trade, then fades back towards the feed price by `HOUSE_IMPACT_DECAY` on every quote tick. You pay the impact before the price moves, so buying and immediately selling back always loses money, however the order is sized or split. A unit test checks exactly that.
-- **The book leans the quote.** The house shifts its quote up to `HOUSE_IMBALANCE_BPS` towards whichever side has more resting orders within 0.25% of the price, as real market makers read order book imbalance. That makes spoofing possible: a large bid that is never meant to fill lifts the price a seller gets. An integration test shows the spoofer selling 4 basis points higher than an honest seller.
+- **The book leans the quote.** The house shifts its quote towards whichever side has more resting shares within 0.25% of the price, as real market makers read order book imbalance. The lean is scaled by the house's depth, so it takes real size to move it: a 1-share bid leans the price by a few hundredths of a basis point, and only a very large imbalance approaches the `HOUSE_IMBALANCE_BPS` maximum. That makes spoofing possible but not free: a large bid that is never meant to fill lifts the price a seller gets, and it risks being filled. An integration test shows a 900-share fake bid letting the spoofer sell 3.6 basis points higher than an honest seller.
 
 <details>
 <summary><b>Worked example</b></summary>
@@ -282,7 +282,7 @@ More on the threading model, the race handling and the tradeoffs is in [docs/arc
 
 | Mode             | Behavior                                                       |
 | ---------------- | -------------------------------------------------------------- |
-| `demo` (default) | A simulated random walk, updated every 15 seconds and labeled. |
+| `demo` (default) | A simulated random walk, updated every 15 seconds and labeled. Set `FEED_SEED` to replay the same prices; otherwise the seed is logged at startup. |
 | `static`         | Configured prices never change, for deterministic experiments. |
 | `finnhub`        | Real provider quotes, fetched server-side. Needs your own key. |
 
