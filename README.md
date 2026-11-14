@@ -264,6 +264,8 @@ frontend/src/                      React home page and trading terminal
 frontend/tests/                    Playwright browser and WebSocket tests
 frontend/cypress/                  Cypress buying-power tests
 docs/architecture.md               design notes and tradeoffs
+docs/performance.md                load test results and bottleneck analysis
+tools/loadtest/                    the load generator
 ```
 
 More on the threading model, the race handling and the tradeoffs is in [docs/architecture.md](docs/architecture.md).
@@ -346,6 +348,16 @@ npm test                               # browser tests, against the running app
 Browser tests expect the full app at `http://127.0.0.1:8080`; set `E2E_BASE_URL` to point them elsewhere. They create throwaway accounts, so use a disposable database if you care about a clean practice environment.
 
 After every integration test, the ledger audit checks that the books still balance and that the event log agrees with them, so any test that moves money also tests that none went missing. The tests cover the order event log, user-to-user and partial fills, price-time and house priority, self-trade refusal, concurrent trades between the same accounts on two symbols, scheduled limit fills, double-spend and fill/cancel races, idempotent retries, stale quotes, migrations, P&L, navigation, account persistence, responsive layouts, and WebSocket delivery across two tabs. CI runs on every pull request and on main.
+
+## Performance
+
+On an Apple M3 laptop, with the app and Postgres in Docker, the exchange handles about **2,000 orders a second** (2,500 requests a second with cancels). It reaches that with 10 simulated traders; past that, more traders only add waiting, taking p99 latency from 12 ms at 10 traders to 540 ms at 500. Every level finished with no errors and balanced books, across 134,000 trades.
+
+The limit is database round trips: about ten per order inside its transaction, with request threads queuing for the same connections. It isn't CPU, disk flushing, the connection pool size or the one-thread-per-stock design. Each of those was ruled out by changing it alone. The method, numbers and thread-dump findings are in [docs/performance.md](docs/performance.md), and the load generator is a single Java file:
+
+```bash
+java tools/loadtest/LoadTest.java --levels 1,10,50,200,500 --seconds 20
+```
 
 ## API
 
