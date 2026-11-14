@@ -25,10 +25,10 @@ class SchemaMigrationTest {
                 "select table_name from information_schema.tables where table_schema = 'public'",
                 String.class);
         assertThat(tables).contains("users", "accounts", "orders", "trades", "positions",
-                "house_positions");
+                "house_positions", "order_events");
 
         Integer applied = jdbc.queryForObject(
                 "select count(*) from flyway_schema_history where success", Integer.class);
-        assertThat(applied).isEqualTo(5);
+        assertThat(applied).isEqualTo(6);
     }
 }

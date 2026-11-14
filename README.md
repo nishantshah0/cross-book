@@ -26,6 +26,7 @@ Trade against other users and a simulated market maker, watch partial fills land
 - **A simulated market maker.** The house quotes a bid and an ask around the feed price, so a market order always has something to trade with, even if you're the only user.
 - **One matcher thread per symbol.** Symbols match in parallel and nothing within a symbol interleaves. Postgres stays the source of truth.
 - **Books that always balance.** The house keeps its own books, so every dollar and share a user gains, the house gives up. A ledger audit proves nothing was created or destroyed, and it runs after every integration test.
+- **A complete audit trail.** Every order event (placed, partly filled, filled, cancelled, rejected) is logged with a sequence number in the same transaction as the change, so the log never disagrees with the books.
 - **Safe under concurrency.** Accounts are locked in ID order so trades can't deadlock, the book changes only after the transaction commits, and retries with an `Idempotency-Key` never place the same order twice.
 - **A full trading terminal.** Searchable watchlist, a chart with crosshair and time ranges, an order ticket showing the house bid and ask, a live order book, P&L and a leaderboard ranked by return.
 - **Live everywhere.** Fills, quotes and portfolio changes are pushed over STOMP WebSockets to every open tab, with a polling fallback.
@@ -179,6 +180,8 @@ erDiagram
     ORDERS ||--o{ TRADES : "fills in"
     ORDERS |o--o{ TRADES : "is the other side of"
     HOUSE_POSITIONS ||--o{ TRADES : "takes the other side of"
+    ORDERS ||--o{ ORDER_EVENTS : "logged in"
+    TRADES ||--o| ORDER_EVENTS : "recorded by"
 
     ACCOUNTS {
         bigint id PK
@@ -221,9 +224,21 @@ erDiagram
         bigint quantity
         numeric cash
     }
+    ORDER_EVENTS {
+        bigint seq PK
+        timestamptz occurred_at
+        varchar type
+        bigint order_id FK
+        bigint account_id FK
+        int filled_quantity
+        bigint trade_id FK
+        int fill_quantity
+        numeric fill_price
+        varchar reason
+    }
 ```
 
-The schema is managed by Flyway, and Hibernate only validates it. Check constraints in the database back up the rules in the code: cash and positions can't go negative, an order can't fill more than its quantity, and only a fully filled order can be `FILLED`. A trade with no `counterparty_order_id` was against the house, and moved the house's row for that symbol the opposite way. The house can be short and out of pocket, so its quantity and cash may go negative.
+The schema is managed by Flyway, and Hibernate only validates it. Check constraints in the database back up the rules in the code: cash and positions can't go negative, an order can't fill more than its quantity, and only a fully filled order can be `FILLED`. A trade with no `counterparty_order_id` was against the house, and moved the house's row for that symbol the opposite way. The house can be short and out of pocket, so its quantity and cash may go negative. `order_events` is append-only: one row each time an order is placed, fills, or ends, plus orders refused before they were placed, which have no `order_id`.
 
 ### Repository layout
 
@@ -235,7 +250,7 @@ src/main/java/.../papertrader/
 ├── quote/        price feed, quote cache and history
 ├── trading/      order book, matching engine, order execution, positions
 └── web/          WebSocket config, events and error handling
-src/main/resources/db/migration/   Flyway migrations, V1 to V5
+src/main/resources/db/migration/   Flyway migrations, V1 to V6
 frontend/src/                      React home page and trading terminal
 frontend/tests/                    Playwright browser and WebSocket tests
 frontend/cypress/                  Cypress buying-power tests
@@ -310,7 +325,7 @@ npm test                               # browser tests, against the running app
 
 Browser tests expect the full app at `http://127.0.0.1:8080`; set `E2E_BASE_URL` to point them elsewhere. They create throwaway accounts, so use a disposable database if you care about a clean practice environment.
 
-After every integration test, the ledger audit checks that the books still balance, so any test that moves money also tests that none went missing. The tests cover user-to-user and partial fills, price-time and house priority, self-trade refusal, concurrent trades between the same accounts on two symbols, scheduled limit fills, double-spend and fill/cancel races, idempotent retries, stale quotes, migrations, P&L, navigation, account persistence, responsive layouts, and WebSocket delivery across two tabs. CI runs on every pull request and on main.
+After every integration test, the ledger audit checks that the books still balance and that the event log agrees with them, so any test that moves money also tests that none went missing. The tests cover the order event log, user-to-user and partial fills, price-time and house priority, self-trade refusal, concurrent trades between the same accounts on two symbols, scheduled limit fills, double-spend and fill/cancel races, idempotent retries, stale quotes, migrations, P&L, navigation, account persistence, responsive layouts, and WebSocket delivery across two tabs. CI runs on every pull request and on main.
 
 ## API
 
@@ -331,6 +346,7 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | GET    | `/api/quotes/status`                    | Feed mode                                  |
 | GET    | `/api/quotes/history`                   | Up to 240 recent quotes per symbol         |
 | GET    | `/api/leaderboard`                      | Top 20 by return percentage                |
+| GET    | `/api/events?after=&symbol=&accountId=` | Order event log, by sequence number        |
 | GET    | `/api/ledger`                           | Run the ledger audit; the house's books    |
 | GET    | `/actuator/health`                      | Health check                               |
 

@@ -50,15 +50,18 @@ class OrderExecution {
     private final TradeRepository trades;
     private final PositionRepository positions;
     private final HousePositionRepository house;
+    private final OrderEventRepository eventLog;
     private final ApplicationEventPublisher events;
 
     OrderExecution(AccountRepository accounts, OrderRepository orders, TradeRepository trades,
-            PositionRepository positions, HousePositionRepository house, ApplicationEventPublisher events) {
+            PositionRepository positions, HousePositionRepository house, OrderEventRepository eventLog,
+            ApplicationEventPublisher events) {
         this.accounts = accounts;
         this.orders = orders;
         this.trades = trades;
         this.positions = positions;
         this.house = house;
+        this.eventLog = eventLog;
         this.events = events;
     }
 
@@ -108,6 +111,7 @@ class OrderExecution {
         checkAvailable(account, order, worstPrice);
         order.setIdempotencyKey(key);
         orders.save(order);
+        eventLog.save(OrderEvent.placed(order));
 
         List<BookChange> changes = new ArrayList<>();
         for (PlannedFill fill : planned) {
@@ -119,6 +123,8 @@ class OrderExecution {
             if (!canSettle(makerAccount, maker, fill.quantity(), fill.price())) {
                 // only possible for an order placed before reservations existed
                 maker.reject();
+                eventLog.save(OrderEvent.rejected(maker, "could not pay for a fill of " + fill.quantity()
+                        + " at " + fill.price()));
                 changes.add(new BookChange.Remove(maker.getId()));
                 publish(maker);
                 continue;
@@ -136,10 +142,20 @@ class OrderExecution {
                 changes.add(new BookChange.Rest(RestingOrder.of(order)));
             } else {
                 order.cancel(); // nothing left to trade with; the filled part stands
+                eventLog.save(OrderEvent.cancelled(order, "market order: nothing left to trade with"));
             }
         }
         publish(order);
         return new Result(order, changes);
+    }
+
+    // An order refused before it was placed rolls back its own transaction, so the
+    // refusal is recorded afterwards in a transaction of its own.
+    @Transactional
+    public void recordRefusal(Long accountId, String symbol, PlaceOrderRequest request, String reason) {
+        if (accounts.existsById(accountId)) {
+            eventLog.save(OrderEvent.refused(accountId, symbol, request, reason));
+        }
     }
 
     // A resting order the house quote now crosses fills in full at the house price.
@@ -158,6 +174,8 @@ class OrderExecution {
         }
         if (!canSettle(account, order, order.remainingQuantity(), price)) {
             order.reject();
+            eventLog.save(OrderEvent.rejected(order, "could not pay for a fill of " + order.remainingQuantity()
+                    + " at " + price));
         } else {
             settle(account, order, order.remainingQuantity(), price, null);
         }
@@ -176,6 +194,7 @@ class OrderExecution {
                     + ", only OPEN orders can be cancelled");
         }
         order.cancel();
+        eventLog.save(OrderEvent.cancelled(order, "cancelled by the account"));
         publish(order);
         return new Result(order, List.of(new BookChange.Remove(orderId)));
     }
@@ -245,7 +264,8 @@ class OrderExecution {
         }
         order.fill(shares, price);
         positions.save(position);
-        trades.save(new Trade(order, shares, price, counterpartyOrderId));
+        Trade trade = trades.save(new Trade(order, shares, price, counterpartyOrderId));
+        eventLog.save(OrderEvent.filled(order, trade));
         if (counterpartyOrderId == null) {
             HousePosition books = house.findById(order.getSymbol())
                     .orElseGet(() -> new HousePosition(order.getSymbol()));

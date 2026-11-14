@@ -84,7 +84,21 @@ That makes two conservation laws checkable:
 
 `LedgerAudit` checks both, and also rebuilds every balance from the trades that produced it: each account's cash and positions, the house's books, each order's filled quantity, the pairing of the two trade rows in a user-to-user fill, fills within their limits, and open orders still backed by what they reserve. Each check is a query for rows that break a rule, run together in one repeatable-read snapshot. Every fill commits atomically, so the audit can run while trading continues.
 
+The audit also checks the order event log against the books: every trade has exactly one fill event with the same quantity, price and counterparty, and every order's events start with PLACED and end in a state that matches the order's status and filled quantity.
+
 The audit runs after every integration test, so a test that moves money also proves none went missing. It is served at `GET /api/ledger`, along with the house's position and profit in each symbol.
+
+## The order event log
+
+`order_events` is an append-only record of everything that happens to an order: PLACED, a PARTIALLY_FILLED or FILLED event for each fill (with its trade, price and counterparty), and CANCELLED or REJECTED with a reason. Each event is written in the same transaction as the change it describes, so a rolled-back fill leaves no event behind and the log can never disagree with the orders and trades tables.
+
+`seq` comes from a database sequence, so it is unique and increasing in the order events were written. One matcher thread writes each symbol's events, so within a symbol, seq order is exactly the order things happened, including the taker's fill before the maker's in a user-to-user trade. Across symbols, two matchers write at once; a reader tailing the live log should re-read a short window rather than assume an event can never appear below the last seq it saw.
+
+A refused order rolls back its own transaction, so the refusal is logged afterwards in a transaction of its own, still on the symbol's thread. It has no `order_id`, because no order was ever created. Requests that fail validation before reaching the engine (a malformed body or an unknown symbol) are not orders and are not logged.
+
+Migration V6 rebuilds the log for orders placed before it existed, from their creation time, trades and final status. Refusals from that time left no rows and cannot be recovered.
+
+`GET /api/events` pages through the log by seq, optionally for one symbol or account. It shows every account's activity, which suits a local practice app with no authentication; a public deployment would restrict it.
 
 ## Safe retries
 
@@ -112,7 +126,7 @@ There is deliberately no identity/authentication layer. Account IDs select share
 
 ## Checks
 
-JUnit/Testcontainers exercises real Postgres migrations and transactional behavior, and audits the ledger after every integration test. The coverage includes concurrent orders, idempotent retries, user-to-user fills across several resting orders and the house, partial fills and cancels, self-trade refusal, and two matcher threads trading between the same accounts at once. The book and engine have unit tests for price-time priority, house priority and when book changes are applied. A scheduled integration test changes a quote and waits for the matcher to fill without another order request. Playwright runs against the packaged app, including two independently subscribed browser tabs, cancellation, server validation, and mobile overflow checks.
+JUnit/Testcontainers exercises real Postgres migrations and transactional behavior, and audits the ledger and event log after every integration test. The coverage includes concurrent orders, idempotent retries, user-to-user fills across several resting orders and the house, partial fills and cancels, self-trade refusal, and two matcher threads trading between the same accounts at once. The book and engine have unit tests for price-time priority, house priority and when book changes are applied. A scheduled integration test changes a quote and waits for the matcher to fill without another order request. Playwright runs against the packaged app, including two independently subscribed browser tabs, cancellation, server validation, and mobile overflow checks.
 
 ## Frontend navigation
 

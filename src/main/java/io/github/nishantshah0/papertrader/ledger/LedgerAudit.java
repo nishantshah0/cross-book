@@ -17,9 +17,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
-// Checks that the books balance: no cash or shares were created or destroyed, and every
-// balance can be rebuilt from the trades that produced it. Each check is a query for the
-// rows that break a rule, so an empty result means the rule holds.
+// Checks that the books balance: no cash or shares were created or destroyed, every
+// balance can be rebuilt from the trades that produced it, and the order event log
+// agrees with both. Each check is a query for the rows that break a rule, so an empty
+// result means the rule holds.
 //
 // All checks read one snapshot. Every trade commits atomically, so a snapshot taken in
 // the middle of trading is still a consistent one, and the audit can run while the
@@ -136,6 +137,33 @@ public class LedgerAudit {
                 order by id
                 """, row -> "order " + row.getLong("id") + " is a " + row.getString("order_type")
                         + " order left " + row.getString("status"));
+
+        // the event log tells the same story as the orders and trades
+        check(violations, "events-match-trades", """
+                select t.id, t.order_id, e.seq
+                from trades t
+                left join order_events e on e.trade_id = t.id
+                where e.seq is null or e.order_id <> t.order_id or e.fill_quantity <> t.quantity
+                   or e.fill_price <> t.price or e.counterparty_order_id is distinct from t.counterparty_order_id
+                order by t.id
+                """, row -> "trade " + row.getLong("id") + " on order " + row.getLong("order_id")
+                        + (row.getObject("seq") == null ? " has no fill event"
+                                : " does not match fill event " + row.getLong("seq")));
+        check(violations, "events-match-orders", """
+                select o.id, o.status, o.filled_quantity, f.type as first_type, l.type as last_type,
+                       l.filled_quantity as last_filled
+                from orders o
+                left join lateral (select type from order_events
+                                   where order_id = o.id order by seq limit 1) f on true
+                left join lateral (select type, filled_quantity from order_events
+                                   where order_id = o.id order by seq desc limit 1) l on true
+                where f.type is distinct from 'PLACED'
+                   or l.filled_quantity is distinct from o.filled_quantity
+                   or not ((o.status = 'OPEN' and l.type in ('PLACED', 'PARTIALLY_FILLED')) or o.status = l.type)
+                order by o.id
+                """, row -> "order " + row.getLong("id") + " is " + row.getString("status") + " with "
+                        + row.getInt("filled_quantity") + " filled, but its events run from "
+                        + row.getString("first_type") + " to " + row.getString("last_type"));
 
         // open orders are still backed by what they reserved
         check(violations, "reserved-cash", """

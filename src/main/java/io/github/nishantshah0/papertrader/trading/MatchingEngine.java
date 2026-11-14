@@ -87,11 +87,23 @@ public class MatchingEngine {
         return call(symbol, () -> {
             Matcher matcher = matcher(symbol);
             try {
-                return apply(matcher, execution.place(accountId, request, key, symbol, matcher.book, house(symbol)));
-            } catch (BookOutOfSyncException e) {
-                log.warn("{} book out of sync, reloading before retrying ({})", symbol, e.getMessage());
-                reload(symbol);
-                return apply(matcher, execution.place(accountId, request, key, symbol, matcher.book, house(symbol)));
+                try {
+                    return apply(matcher, execution.place(accountId, request, key, symbol, matcher.book,
+                            house(symbol)));
+                } catch (BookOutOfSyncException e) {
+                    log.warn("{} book out of sync, reloading before retrying ({})", symbol, e.getMessage());
+                    reload(symbol);
+                    return apply(matcher, execution.place(accountId, request, key, symbol, matcher.book,
+                            house(symbol)));
+                }
+            } catch (OrderRejectedException e) {
+                // still on the symbol's thread, so the refusal takes its place in the log
+                try {
+                    execution.recordRefusal(accountId, symbol, request, e.getMessage());
+                } catch (RuntimeException logFailure) {
+                    log.warn("Could not log a refused {} order ({})", symbol, logFailure.getClass().getSimpleName());
+                }
+                throw e;
             }
         });
     }
