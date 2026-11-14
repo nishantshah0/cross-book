@@ -3,10 +3,12 @@ package io.github.nishantshah0.papertrader;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.nishantshah0.papertrader.account.AccountResponse;
+import io.github.nishantshah0.papertrader.ledger.LedgerAudit;
 import io.github.nishantshah0.papertrader.portfolio.PortfolioResponse;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -36,6 +38,16 @@ abstract class ApiTestSupport {
 
     @Autowired
     protected ObjectMapper json;
+
+    @Autowired
+    protected LedgerAudit ledger;
+
+    // whatever a test did, no cash or shares may have appeared or disappeared, and every
+    // balance must still agree with the trades behind it
+    @AfterEach
+    void booksStillBalance() {
+        assertThat(ledger.run().violations()).as("ledger violations after the test").isEmpty();
+    }
 
     protected AccountResponse createAccount() throws Exception {
         String username = "t_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);

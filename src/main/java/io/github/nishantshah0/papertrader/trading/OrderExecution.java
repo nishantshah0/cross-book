@@ -49,14 +49,16 @@ class OrderExecution {
     private final OrderRepository orders;
     private final TradeRepository trades;
     private final PositionRepository positions;
+    private final HousePositionRepository house;
     private final ApplicationEventPublisher events;
 
     OrderExecution(AccountRepository accounts, OrderRepository orders, TradeRepository trades,
-            PositionRepository positions, ApplicationEventPublisher events) {
+            PositionRepository positions, HousePositionRepository house, ApplicationEventPublisher events) {
         this.accounts = accounts;
         this.orders = orders;
         this.trades = trades;
         this.positions = positions;
+        this.house = house;
         this.events = events;
     }
 
@@ -219,7 +221,9 @@ class OrderExecution {
                 : held(account.getId(), order.getSymbol()) >= shares;
     }
 
-    // one side of one fill: cash, position, order and trade row move together
+    // One side of one fill: cash, position, order and trade row move together. With no
+    // counterparty order the house is the other side, and its books move in the same
+    // transaction, so every dollar and share a user gains, the house gives up.
     private void settle(Account account, Order order, int shares, BigDecimal price, Long counterpartyOrderId) {
         BigDecimal notional = notional(price, shares);
         Position position = positions.findByAccountIdAndSymbol(account.getId(), order.getSymbol())
@@ -242,6 +246,12 @@ class OrderExecution {
         order.fill(shares, price);
         positions.save(position);
         trades.save(new Trade(order, shares, price, counterpartyOrderId));
+        if (counterpartyOrderId == null) {
+            HousePosition books = house.findById(order.getSymbol())
+                    .orElseGet(() -> new HousePosition(order.getSymbol()));
+            books.takeOtherSide(order.getSide(), shares, notional);
+            house.save(books);
+        }
     }
 
     private int held(Long accountId, String symbol) {

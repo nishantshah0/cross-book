@@ -13,7 +13,7 @@ Demo generator or Finnhub quote API
                  v
      OrderExecution: lock every account involved, in ID order
                  |
-     Postgres: orders, trades, cash, positions
+     Postgres: orders, trades, cash, positions, house books
                  |
           after commit: apply the changes to the book
                  |
@@ -73,6 +73,19 @@ Open limit orders reserve buying power and inventory for the shares they still h
 
 Notional values round half up to cents per fill; prices and average costs use four decimals. Fills are whole-share and long-only.
 
+## The books balance
+
+The house is a real counterparty with its own books: a row per symbol in `house_positions`, holding the shares it is long or short and the cash it has taken in or paid out. A fill against the house moves that row the opposite way to the user, in the same transaction. Only the symbol's matcher thread writes it, so it needs no lock.
+
+That makes two conservation laws checkable:
+
+- **Cash.** Users' cash plus the house's cash equals the cash every account started with.
+- **Shares.** For each symbol, users' positions plus the house's quantity sum to zero. Every share a user holds is one the house sold.
+
+`LedgerAudit` checks both, and also rebuilds every balance from the trades that produced it: each account's cash and positions, the house's books, each order's filled quantity, the pairing of the two trade rows in a user-to-user fill, fills within their limits, and open orders still backed by what they reserve. Each check is a query for rows that break a rule, run together in one repeatable-read snapshot. Every fill commits atomically, so the audit can run while trading continues.
+
+The audit runs after every integration test, so a test that moves money also proves none went missing. It is served at `GET /api/ledger`, along with the house's position and profit in each symbol.
+
 ## Safe retries
 
 The optional idempotency key is scoped to the account and limited to 128 characters. Placement looks up an existing key before planning fills or checking balances. Retries of the same order run on the same matcher thread one after another, so the second always sees the first. Matching payloads return the existing order (including its latest status); changed payloads return 409. A partial unique index provides a second line of defense.
@@ -99,7 +112,7 @@ There is deliberately no identity/authentication layer. Account IDs select share
 
 ## Checks
 
-JUnit/Testcontainers exercises real Postgres migrations and transactional behavior, including concurrent orders, idempotent retries, user-to-user fills across several resting orders and the house, partial fills and cancels, self-trade refusal, and two matcher threads trading between the same accounts at once. The book and engine have unit tests for price-time priority, house priority and when book changes are applied. A scheduled integration test changes a quote and waits for the matcher to fill without another order request. Playwright runs against the packaged app, including two independently subscribed browser tabs, cancellation, server validation, and mobile overflow checks.
+JUnit/Testcontainers exercises real Postgres migrations and transactional behavior, and audits the ledger after every integration test. The coverage includes concurrent orders, idempotent retries, user-to-user fills across several resting orders and the house, partial fills and cancels, self-trade refusal, and two matcher threads trading between the same accounts at once. The book and engine have unit tests for price-time priority, house priority and when book changes are applied. A scheduled integration test changes a quote and waits for the matcher to fill without another order request. Playwright runs against the packaged app, including two independently subscribed browser tabs, cancellation, server validation, and mobile overflow checks.
 
 ## Frontend navigation
 

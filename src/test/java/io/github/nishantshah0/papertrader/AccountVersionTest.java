@@ -27,5 +27,11 @@ class AccountVersionTest extends ApiTestSupport {
         assertThatThrownBy(() -> accounts.saveAndFlush(stale))
                 .isInstanceOf(ObjectOptimisticLockingFailureException.class);
         assertThat(accounts.findById(id).orElseThrow().getCash()).isEqualByComparingTo("900.00");
+
+        // the debit had no trade behind it, so the ledger audit would rightly flag it;
+        // put the cash back so the books balance again
+        Account current = accounts.findById(id).orElseThrow();
+        current.credit(new BigDecimal("100.00"));
+        accounts.saveAndFlush(current);
     }
 }
