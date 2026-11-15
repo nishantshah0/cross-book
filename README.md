@@ -406,7 +406,7 @@ Leave out `type` and `limitPrice` for a market order.
 ## Limitations
 
 - **No authentication.** Account IDs aren't passwords. Add identity and authorization before deploying publicly.
-- **Small-scale by design.** The leaderboard scans every account and order lists aren't paginated.
+- **Small-scale by design.** Order and trade lists aren't paginated.
 - **Out of scope.** Corporate actions, exchange calendars, persistent price history and distributed messaging.
 
 ## What I'd do next

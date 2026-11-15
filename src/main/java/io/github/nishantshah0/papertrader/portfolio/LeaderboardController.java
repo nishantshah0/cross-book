@@ -1,29 +1,65 @@
 package io.github.nishantshah0.papertrader.portfolio;
-import io.github.nishantshah0.papertrader.account.AccountRepository;
+
+import io.github.nishantshah0.papertrader.quote.Quote;
+import io.github.nishantshah0.papertrader.quote.QuoteCache;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.Comparator;
 import java.util.List;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 
+// One query ranks every account, so the cost no longer grows with a round trip per
+// account. Prices live in memory, so the latest quotes go in as two arrays; a position
+// in a symbol with no quote is marked at its average cost, as the portfolio page does.
 @RestController
 class LeaderboardController {
-    private final AccountRepository accounts;
-    private final PortfolioService portfolios;
-    LeaderboardController(AccountRepository accounts, PortfolioService portfolios) {
-        this.accounts = accounts;
-        this.portfolios = portfolios;
+
+    static final int SIZE = 20;
+
+    // each position's value rounds to cents before it is summed, and the return rounds
+    // to two places before ranking, so the numbers match PortfolioService exactly
+    private static final String SQL = """
+            with marks (symbol, price) as (
+                select * from unnest(?::varchar[], ?::numeric[])
+            ), totals as (
+                select a.id, u.username, a.starting_cash,
+                       a.cash + coalesce(sum(round(p.quantity * coalesce(m.price, p.avg_cost), 2)), 0) as total_value
+                from accounts a
+                join users u on u.id = a.user_id
+                left join positions p on p.account_id = a.id and p.quantity > 0
+                left join marks m on m.symbol = p.symbol
+                group by a.id, u.username, a.starting_cash, a.cash
+            )
+            select id, username, total_value,
+                   round((total_value - starting_cash) * 100 / starting_cash, 2) as return_percent
+            from totals
+            order by return_percent desc, id
+            limit ?
+            """;
+
+    private final JdbcTemplate jdbc;
+    private final QuoteCache quotes;
+
+    LeaderboardController(JdbcTemplate jdbc, QuoteCache quotes) {
+        this.jdbc = jdbc;
+        this.quotes = quotes;
     }
+
     public record Entry(Long accountId, String username, BigDecimal totalValue, BigDecimal returnPercent) {}
+
     @GetMapping("/api/leaderboard")
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public List<Entry> leaderboard() {
-        return accounts.findAll().stream().map(a -> portfolios.portfolio(a.getId()))
-                .map(p -> new Entry(p.accountId(), p.username(), p.totalValue(),
-                        p.totalPnl().multiply(new BigDecimal("100")).divide(p.startingCash(), 2, RoundingMode.HALF_UP)))
-                .sorted(Comparator.comparing(Entry::returnPercent).reversed().thenComparing(Entry::accountId))
-                .limit(20).toList();
+        List<Quote> marks = quotes.all();
+        String[] symbols = marks.stream().map(Quote::symbol).toArray(String[]::new);
+        BigDecimal[] prices = marks.stream().map(Quote::price).toArray(BigDecimal[]::new);
+        return jdbc.query(SQL, statement -> {
+            statement.setArray(1, statement.getConnection().createArrayOf("varchar", symbols));
+            statement.setArray(2, statement.getConnection().createArrayOf("numeric", prices));
+            statement.setInt(3, SIZE);
+        }, (row, n) -> new Entry(row.getLong("id"), row.getString("username"),
+                row.getBigDecimal("total_value"), row.getBigDecimal("return_percent")));
     }
 }
