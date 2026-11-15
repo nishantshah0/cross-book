@@ -9,11 +9,11 @@
     <relativePath/> <!-- lookup parent from repository -->
   </parent>
   <groupId>io.github.nishantshah0</groupId>
-  <artifactId>paper-trader</artifactId>
+  <artifactId>cross-book</artifactId>
   <version>0.0.1-SNAPSHOT</version>
-  <name>paper-trader</name>
-  <description>Paper-trading simulator with a limit-order matching engine</description>
-  <url>https://github.com/nishantshah0/paper-trader</url>
+  <name>cross-book</name>
+  <description>A stock exchange engine with a bot market and planted cheaters, for testing market surveillance</description>
+  <url>https://github.com/nishantshah0/cross-book</url>
   <licenses>
     <license>
       <name>MIT License</name>
@@ -28,9 +28,9 @@
     </developer>
   </developers>
   <scm>
-    <connection>scm:git:https://github.com/nishantshah0/paper-trader.git</connection>
-    <developerConnection>scm:git:git@github.com:nishantshah0/paper-trader.git</developerConnection>
-    <url>https://github.com/nishantshah0/paper-trader</url>
+    <connection>scm:git:https://github.com/nishantshah0/cross-book.git</connection>
+    <developerConnection>scm:git:git@github.com:nishantshah0/cross-book.git</developerConnection>
+    <url>https://github.com/nishantshah0/cross-book</url>
   </scm>
   <properties>
     <java.version>21</java.version>

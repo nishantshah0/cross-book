@@ -3,7 +3,7 @@ import Icon from "./Icon";
 import { api, money } from "./api";
 import { bookSides } from "./book";
 
-const REPO = "https://github.com/nishantshah0/paper-trader";
+const REPO = "https://github.com/nishantshah0/cross-book";
 const SOURCE =
   REPO + "/blob/main/src/main/java/io/github/nishantshah0/papertrader/";
 
@@ -61,7 +61,7 @@ const internals = [
 const faqs = [
   [
     "Am I trading with real money?",
-    "No. Every account starts with virtual cash. Orders are simulated, and PaperTrader has no connection to a brokerage or the ability to move real funds.",
+    "No. Every account starts with virtual cash. Orders are simulated, and CrossBook has no connection to a brokerage or the ability to move real funds.",
   ],
   [
     "Who is on the other side of my trade?",
@@ -585,8 +585,8 @@ export default function Home() {
         Skip to content
       </a>
       <header className="home-nav">
-        <a href="/" className="home-brand" aria-label="Paper Trader home">
-          PaperTrader
+        <a href="/" className="home-brand" aria-label="CrossBook home">
+          CrossBook
         </a>
         <nav
           className={menu ? "home-links open" : "home-links"}
@@ -626,12 +626,12 @@ export default function Home() {
       <main id="home-main">
         <section className="hero">
           <div className="hero-copy">
-            <h1>Paper trading on a real order book.</h1>
+            <h1>Trade on a real order book.</h1>
             <p>
-              PaperTrader is a stock exchange simulator. Your orders match
-              against other traders on price and time, and a simulated market
-              maker takes the rest. Fills can be partial, limit orders rest in
-              the book, and every trade is audited.
+              CrossBook is a stock exchange simulator. Your orders match against
+              other traders on price and time, and a simulated market maker
+              takes the rest. Fills can be partial, limit orders rest in the
+              book, and every trade is audited.
             </p>
             <div className="hero-actions">
               <a className="button primary" href="/terminal?setup=1">
@@ -706,7 +706,7 @@ export default function Home() {
           <a href="/api/ledger">Ledger audit</a>
         </nav>
         <p>
-          PaperTrader is a simulation. No real funds are held and no orders are
+          CrossBook is a simulation. No real funds are held and no orders are
           sent to a brokerage. Practice accounts are shared in this demo, and an
           account ID is not a private credential. Results here do not predict
           real-market performance.

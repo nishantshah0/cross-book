@@ -20,7 +20,6 @@ final class MarketMaker extends Bot {
 
     private final List<String> covers;
     private final double halfSpreadBps;
-    private final Map<String, Integer> target = new HashMap<>();
     private final Map<String, Long> bids = new HashMap<>();
     private final Map<String, Long> asks = new HashMap<>();
     private int next;
@@ -38,12 +37,7 @@ final class MarketMaker extends Bot {
 
     @Override
     void allocate(BotMarket market) {
-        double each = market.startingCash.doubleValue() * STARTING_STAKE / covers.size();
-        for (String symbol : covers) {
-            int shares = (int) (each / market.feed(symbol));
-            market.allocate(accountId, symbol, shares);
-            target.put(symbol, Math.max(1, shares));
-        }
+        hold(market, covers, STARTING_STAKE);
     }
 
     @Override
@@ -54,15 +48,18 @@ final class MarketMaker extends Bot {
         pull(market, asks.remove(symbol));
 
         int held = market.shares(accountId, symbol);
-        int goal = target.get(symbol);
+        int goal = Math.max(1, stake.get(symbol));
         double fair = market.feed(symbol);
         double inventory = Math.max(-1, Math.min(1, (double) (held - goal) / goal));
         double skew = -SKEW * halfSpreadBps * inventory;
         int size = Math.max(1, (int) (market.startingCash.doubleValue() * QUOTE / fair));
 
-        var bid = BotMarket.cents(fair * (1 + (skew - halfSpreadBps) / 10_000), OrderSide.BUY);
-        market.limit(accountId, symbol, OrderSide.BUY, size, bid)
-                .filter(Order::isOpen).ifPresent(order -> bids.put(symbol, order.getId()));
+        int wanted = Math.min(size, 2 * goal - held); // the same limit as everyone: twice its stake
+        if (wanted > 0) {
+            var bid = BotMarket.cents(fair * (1 + (skew - halfSpreadBps) / 10_000), OrderSide.BUY);
+            market.limit(accountId, symbol, OrderSide.BUY, wanted, bid)
+                    .filter(Order::isOpen).ifPresent(order -> bids.put(symbol, order.getId()));
+        }
         int offered = Math.min(size, held);
         if (offered > 0) {
             var ask = BotMarket.cents(fair * (1 + (skew + halfSpreadBps) / 10_000), OrderSide.SELL);

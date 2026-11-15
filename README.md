@@ -1,11 +1,11 @@
 <div align="center">
 
-# PaperTrader
+# CrossBook
 
-**A paper-trading simulator with a real matching engine.**<br>
-Trade against other users and a simulated market maker, watch partial fills land live, and track your P&L. No real money involved.
+**A stock exchange engine with a bot market and planted cheaters, for testing market surveillance.**<br>
+Run 140 simulated traders, spoofers included, and replay the market to the millisecond, or trade in it yourself from a full terminal. No real money involved.
 
-[![Build and test](https://github.com/nishantshah0/paper-trader/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nishantshah0/paper-trader/actions/workflows/ci.yml)
+[![Build and test](https://github.com/nishantshah0/cross-book/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nishantshah0/cross-book/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Java 21](https://img.shields.io/badge/Java-21-orange?logo=openjdk&logoColor=white)
 ![Spring Boot 4](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?logo=springboot&logoColor=white)
@@ -26,7 +26,7 @@ Trade against other users and a simulated market maker, watch partial fills land
 - **A simulated market maker.** The house quotes a bid and an ask around the feed price, so a market order always has something to trade with, even if you're the only user.
 - **One matcher thread per symbol.** Symbols match in parallel and nothing within a symbol interleaves. Postgres stays the source of truth.
 - **Books that always balance.** The house keeps its own books, so every dollar and share a user gains, the house gives up. A ledger audit proves nothing was created or destroyed, and it runs after every integration test.
-- **A replayable bot market.** One command runs 100+ simulated traders for an hour of market time in about a minute. The same seed gives the same market down to the millisecond, and only a separate answer key says which account is which bot.
+- **A bot market with a planted cheater.** One command runs 140 simulated traders for an hour of market time in about a minute, including spoofers whose fake orders measurably pay off against an honest control. The same seed gives the same market down to the millisecond, and only a separate answer key says who cheated, order by order.
 - **A complete audit trail.** Every order event (placed, partly filled, filled, cancelled, rejected) is logged with a sequence number in the same transaction as the change, so the log never disagrees with the books.
 - **Safe under concurrency.** Accounts are locked in ID order so trades can't deadlock, the book changes only after the transaction commits, and retries with an `Idempotency-Key` never place the same order twice.
 - **A full trading terminal.** Everything on one screen: a searchable watchlist, a chart with a crosshair and time ranges, an order book ladder you can click to set a limit price, the order ticket, positions and order history, and a leaderboard.
@@ -42,8 +42,8 @@ Trade against other users and a simulated market maker, watch partial fills land
 With Docker running:
 
 ```bash
-git clone https://github.com/nishantshah0/paper-trader.git
-cd paper-trader
+git clone https://github.com/nishantshah0/cross-book.git
+cd cross-book
 docker compose --profile app up --build -d --wait
 ```
 
@@ -61,7 +61,7 @@ docker compose --profile app down
 
 The home page, with a working demo that places a real order and shows the events it created:
 
-![PaperTrader home page](docs/home.png)
+![CrossBook home page](docs/home.png)
 
 </details>
 
@@ -124,36 +124,65 @@ One command runs a whole market of simulated traders, in book mode on the simula
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=bots   # wipes the local database first
 ```
 
-It resets the exchange, runs 100 noise traders and 8 market makers across all twelve stocks for an hour of market time, logs a report, and leaves the app up so you can browse the result. `BOT_SEED`, `BOT_TICKS`, `BOT_NOISE_TRADERS` and `BOT_MARKET_MAKERS` change the run, and `POST /api/bots/runs` starts one from a running app.
+It resets the exchange, runs 140 bots across all twelve stocks for an hour of market time, logs a report, and leaves the app up so you can browse the result. `BOT_SEED`, `BOT_TICKS`, `BOT_NOISE_TRADERS`, `BOT_MARKET_MAKERS`, `BOT_BOOK_READERS`, `BOT_VALUE_TRADERS` and `BOT_SPOOFERS` change the run, and `POST /api/bots/runs` starts one from a running app.
 
-- **Noise traders** buy and sell at random, in random sizes. Some orders take what the book offers and some are limit orders a little off the middle, and they give up on old ones. They only see the book and the last trade.
-- **Market makers** each quote a few stocks around the feed price, which only they see. They pull and re-post their quotes, shifted against their inventory. They're what keeps trading anchored to the feed.
+| Bots | Kind | Sees | Does |
+| ---: | --- | --- | --- |
+| 100 | Noise trader | the book | Buys or sells at random, sometimes at market, sometimes with a limit a little off the middle |
+| 8 | Market maker | the feed | Quotes a bid and an ask in a few stocks around the feed price, leaning against its inventory |
+| 20 | Book reader | the book | Trades in the direction of the most lopsided book: lots of resting bids means buy |
+| 10 | Value trader | the feed | Trades a stock back towards its feed price when the book drifts more than 15 bps away |
+| 2 | **Spoofer** (cheater) | the book | Stacks large fake orders on one side, trades a small real order on the other, then cancels the fakes |
 
-A measured run with the defaults (seed 1, on an Apple M3 laptop, fresh database):
+The feed price stands in for a stock's true value, and only makers and value traders see it. Every honest bot has a position limit: it can sell down to zero or buy up to twice what it started with.
+
+#### Does the spoofing work?
+
+A spoofer is only worth catching if it actually profits from its fake orders. So each spoofed run is paired with a **control**: the same seed and the same bot, with the same timing and the same real orders, but zero fake layers (`"spoofLayers": 0`). The control places no fake orders, so it's honest. Over three seeds, an hour of market time each:
+
+| Seed | Real orders that filled | | Shares traded | | Trading P&L | |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| | spoofer | control | spoofer | control | spoofer | control |
+| 1 | 45% | 20% | 434 | 164 | +$41 | −$40 |
+| 2 | 34% | 24% | 245 | 102 | +$102 | +$30 |
+| 3 | 48% | 20% | 319 | 116 | +$57 | −$44 |
+
+In every seed the fake orders more than double the shares the spoofer trades (2.4 to 2.8 times) and lift how often its real order fills, from about 1 in 5 to as much as 1 in 2. They turn a small loss into a small, steady profit. That profit comes from the book readers, who see the fake demand and buy from the spoofer. The amounts are small (about $33 a spoofer per hour, on $100,000), which matches real spoofing cases, where the edge was about a tick per trade. In seed 3 it also did damage: the spoofer's flow drained one stock's market makers, and TSLA ended 2.1% above its feed price. The same seed without spoofers keeps every stock within 43 bps.
+
+#### What a run looks like
+
+The default market with the spoofers, seed 1, on an Apple M3 laptop with a fresh database:
 
 | | |
 | --- | --- |
-| Bots | 108 (100 noise traders, 8 market makers) on 12 stocks |
-| Market time | 1 hour (240 ticks of 15 seconds) |
-| Wall time | 64 seconds, about 710 actions a second |
-| Actions | 45,423: 22,741 orders placed, 12,073 cancels |
-| Trades between bots | 10,324 |
-| Refused orders | 15 |
-| Last trade vs feed price | within 31 bps for every stock |
+| Wall time | 68 seconds for an hour of market time, about 715 actions a second |
+| Actions | 48,885 |
+| Trades between bots | 12,462 |
+| Refused orders | 12 |
+| Last trade vs feed price | within 33 bps for every stock |
+| Spoofing episodes | 157, with 578 fake orders, each pulled 2 to 6 seconds after it was placed |
 | Ledger | balanced |
 
 The bots call the order service directly rather than going over HTTP, so their orders are checked, matched, logged and audited like anyone's.
 
-**A bug worth knowing about.** In the first version, a noise trader that wanted to sell a stock it didn't hold bought it instead. That one line tilted the whole market towards buying, and every stock drifted up, by as much as 4.7% above its feed price in an hour. Now it does nothing that turn, and prices stay within 31 bps. A detector has to be graded against a market whose honest traders really are neutral, so this is checked on every full run.
+#### What makes a run fair to grade a detector on
 
-What makes a run usable for grading a detector:
-
-- **It replays exactly.** The same request writes the same rows, down to the ids and the millisecond timestamps. A test runs a market twice and compares a hash of every event, trade and balance.
+- **It replays exactly.** The same request writes the same rows, down to the ids and the millisecond timestamps. A test runs a market with every kind of bot twice and compares a hash of every event, trade, balance and label.
 - **Bots don't share random numbers.** Each bot has its own random streams, seeded from the run's seed and the bot's name: one for when it wakes and one for what it does. Rerunning a market without one bot leaves every other bot's schedule exactly as it was, so the difference is that bot's effect.
-- **Bots act through each tick.** Each bot wakes at random intervals (exponential gaps), and the clock moves to each wake, so the event log has realistic timing between orders and cancels.
-- **Only the answer key says who is who.** Accounts are named `trader_0001` and up, opened in an order shuffled by the seed, so neither the name nor the id gives a bot away. The `answer_key` table records each account's bot and kind for grading; a detector reads only the market data.
+- **Bots act through each tick.** Each bot wakes at random intervals, and the clock moves to each wake, so the event log has realistic timing between orders and cancels.
+- **Only the answer key says who is who.** Accounts are named `trader_0001` and up, opened in an order shuffled by the seed, so neither the name nor the id gives a bot away. `answer_key` records each account's bot and whether it cheats. `answer_key_orders` labels every order a spoofer placed as `SPOOF` or `REAL`, by episode, so a detector can be graded on exact orders. A detector reads only the market data.
+- **There's a hard negative built in.** The control spoofer trades just like the spoofer minus the fakes. A detector that flags it is flagging timing, not spoofing.
 
-What's still simplified: market makers see the feed price, as a stand-in for the private information real makers trade on. Noise traders are purely random, with no momentum or herding. Nobody can short. Bots act one at a time, which is what makes a run exact and caps it at about 700 actions a second.
+#### Bugs the measurements caught
+
+The honest market has to stay near its feed price, or a detector graded on it learns nothing. Twice, it didn't:
+
+1. **A noise trader that couldn't sell bought instead.** That one line tilted the market towards buying, and every stock drifted up, by as much as 4.7% in an hour. Fix: do nothing at the limit.
+2. **Bots could buy far more than they could sell.** Each had tens of thousands in cash but only a few shares of an expensive stock. Once those were sold it could only buy, and COST ended 5.5% above its feed, with the makers and value traders holding none. Fix: the symmetric position limit above.
+
+Both were found by tracing which bots held what, not by tuning numbers until the drift went away. Leaning the makers harder against their inventory was tried first, and it made things worse.
+
+What's still simplified: noise traders are purely random, with no momentum or herding. Nobody can short. Bots act one at a time, which is what makes a run exact and caps it at about 700 actions a second. Layering is the only cheat so far.
 
 **Reservations.** Open limit orders reserve what they still need: a buy holds its limit price times its remaining shares, and a sell holds its remaining shares. New orders can only use buying power and shares that aren't already reserved, so a resting order stays funded until it fills or is cancelled. Cancelling a partly filled order keeps what already filled.
 
@@ -303,13 +332,13 @@ The schema is managed by Flyway, and Hibernate only validates it. Check constrai
 ```text
 src/main/java/.../papertrader/
 ├── account/      accounts and users
-├── bots/         the bot runner, noise traders, market makers and the answer key
+├── bots/         the bot runner, the honest bots, the spoofer and the answer key
 ├── ledger/       the ledger audit
 ├── portfolio/    portfolio valuation, P&L and the leaderboard
 ├── quote/        price feed, quote cache and history
 ├── trading/      order book, matching engine, order execution, positions
 └── web/          WebSocket config, events and error handling
-src/main/resources/db/migration/   Flyway migrations, V1 to V7
+src/main/resources/db/migration/   Flyway migrations, V1 to V8
 frontend/src/                      React home page and trading terminal
 frontend/tests/                    Playwright browser and WebSocket tests
 frontend/cypress/                  Cypress buying-power tests
@@ -447,6 +476,7 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | POST   | `/api/simulation/allocations?accountId=&symbol=&shares=` | Sell an account starting shares at the feed price (simulated clock only) |
 | POST   | `/api/bots/runs`                        | Run a whole bot market (book mode, simulated clock); returns the report |
 | GET    | `/api/bots/answer-key`                  | Which account is which bot, for grading     |
+| GET    | `/api/bots/answer-key/orders`           | Every spoofer order, labelled `SPOOF` or `REAL` by episode |
 | GET    | `/actuator/health`                      | Health check                               |
 
 <details>
@@ -474,7 +504,8 @@ Leave out `type` and `limitPrice` for a market order.
 
 ## What I'd do next
 
-- **Cheaters and a detector.** Bots that spoof, wash-trade and pump-and-dump among the honest ones, and a surveillance system graded against the answer key.
+- **A detector.** A surveillance system that flags spoofing from the order log alone, graded against the answer key, with the control spoofer as its hardest false alarm.
+- **More cheaters.** Wash trading between colluding accounts, and pump-and-dump.
 - **More order types.** Stop orders, time-in-force (IOC, FOK, day) and amend-in-place.
 - **Persist quote history.** Chart history lives in memory and resets on restart.
 - **Authentication**, so it can be hosted publicly.

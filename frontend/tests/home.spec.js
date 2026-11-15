@@ -6,7 +6,7 @@ test("home page introduces the product and launches the working terminal", async
 }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /Paper trading on a real order book/ }),
+    page.getByRole("heading", { name: /Trade on a real order book/ }),
   ).toBeVisible();
   await page
     .getByRole("link", { name: "Explore the terminal", exact: true })
@@ -19,12 +19,10 @@ test("home page introduces the product and launches the working terminal", async
   await expect(
     page.getByRole("heading", { name: "Trading terminal", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("link", { name: "Paper Trader home", exact: true })
-    .click();
+  await page.getByRole("link", { name: "CrossBook home", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(
-    page.getByRole("heading", { name: /Paper trading on a real order book/ }),
+    page.getByRole("heading", { name: /Trade on a real order book/ }),
   ).toBeVisible();
   const trailingSlash = await request.get("/terminal/");
   expect(trailingSlash.status()).toBe(200);

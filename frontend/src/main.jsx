@@ -9,8 +9,8 @@ import "./style.css";
 import "./home.css";
 const terminal = /^\/terminal\/?$/.test(window.location.pathname);
 document.title = terminal
-  ? "PaperTrader — Trading terminal"
-  : "PaperTrader — Paper trading on a real order book";
+  ? "CrossBook — Trading terminal"
+  : "CrossBook — Trade on a real order book";
 createRoot(document.getElementById("root")).render(
   terminal ? <App /> : <Home />,
 );

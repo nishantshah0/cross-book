@@ -14,3 +14,6 @@ papertrader:
     ticks: ${BOT_TICKS:240}
     noise-traders: ${BOT_NOISE_TRADERS:100}
     market-makers: ${BOT_MARKET_MAKERS:8}
+    book-readers: ${BOT_BOOK_READERS:20}
+    value-traders: ${BOT_VALUE_TRADERS:10}
+    spoofers: ${BOT_SPOOFERS:2}

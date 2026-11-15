@@ -11,6 +11,10 @@ public record BotRunReport(
         int ticks,
         int noiseTraders,
         int marketMakers,
+        int bookReaders,
+        int valueTraders,
+        int spoofers,
+        int spoofLayers,
         List<String> symbols,
         Instant startedAt,
         Instant endedAt,
@@ -21,9 +25,16 @@ public record BotRunReport(
         long cancelsTooLate,
         long trades,
         List<SymbolSummary> prices,
+        List<KindSummary> kinds,
         boolean ledgerBalanced,
         double seconds,
         double actionsPerSecond) {
+
+    // How each kind of bot did from trading: what its accounts are worth at the end, at
+    // the feed price, minus what they would be worth had they only held their starting
+    // shares. So a stock drifting up or down does not count as anyone's skill or loss.
+    public record KindSummary(BotKind kind, int bots, BigDecimal tradingPnl, BigDecimal pnlPerBot) {
+    }
 
     // where trading left a symbol against its feed price; gapBps is null if it never traded
     public record SymbolSummary(String symbol, BigDecimal feed, BigDecimal lastTrade, Double gapBps, long trades,

@@ -121,7 +121,7 @@ public class Simulation {
     public synchronized void reset(long seed) {
         SimulationClock simulated = requireSimulated();
         engine.reset();
-        jdbc.execute("truncate table answer_key, order_events, trades, positions, house_positions, orders, accounts, users "
+        jdbc.execute("truncate table answer_key_orders, answer_key, order_events, trades, positions, house_positions, orders, accounts, users "
                 + "restart identity cascade");
         simulated.set(start);
         quotes.reset();

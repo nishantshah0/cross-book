@@ -376,8 +376,8 @@ export default function App() {
   return (
     <div className="terminal">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="Paper Trader home">
-          PaperTrader
+        <a className="brand" href="/" aria-label="CrossBook home">
+          CrossBook
         </a>
         <h1>Trading terminal</h1>
         <div className="topbar-right">

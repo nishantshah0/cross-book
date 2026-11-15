@@ -182,15 +182,35 @@ A simulated clock refuses live quotes, which have their own timestamps.
 
 ## Bot markets
 
-`BotRunner.run` builds a market from a seed and a roster (noise traders and market makers) and runs it to the end in one call. It refuses unless the app is in book mode on a simulated clock, and it starts with `Simulation.reset(seed)`, so every run starts from the same empty exchange.
+`BotRunner.run` builds a market from a seed and a roster and runs it to the end in one call. It refuses unless the app is in book mode on a simulated clock, and it starts with `Simulation.reset(seed)`, so every run starts from the same empty exchange.
 
-**Scheduling.** Each bot keeps its next wake time. A priority queue orders the bots by wake time, then by a fixed bot key, so ties break the same way every run. The runner takes the earliest bot, moves the clock to its wake (ticking for every grid point on the way, then `advance` for the rest), lets it act once, and draws its next wake. Gaps are exponential, so wakes arrive like independent orders. A market maker's re-quote is four calls at one instant (two cancels, two orders), which is how a real maker behaves.
+**The roster.** Four honest kinds and one cheater:
+
+| Kind | Sees | Does |
+| --- | --- | --- |
+| Noise trader | the book | Buys or sells at random, at market or with a limit a little off the middle; gives up on old orders |
+| Market maker | the feed | Quotes a bid and an ask in a few stocks around the feed price, shifted against its inventory |
+| Book reader | the book | Trades at market in the direction of the most lopsided book, when it is lopsided enough |
+| Value trader | the feed | Trades a stock back towards its feed price when the book drifts more than 15 bps away |
+| Spoofer | the book | Layers fake orders on one side, trades a small real order on the other, then pulls everything |
+
+Makers and value traders each follow a run of consecutive symbols, about two of each per symbol. The feed price stands in for value; only the makers and value traders get to see it.
+
+**Position limits.** Every honest bot can sell down to nothing and buy up to twice the shares it started with. The limit has to be the same both ways. Without the buying half, a bot with plenty of cash but only a few shares of an expensive stock can soon only buy it, and the price drifts up: a measured run had COST end 5.5% above its feed, with the makers and value traders holding none of it and the book readers holding 304 shares. The same mistake appeared earlier in a smaller form, when a noise trader that couldn't sell bought instead (4.7% drift). In both cases the fix was to do nothing at the limit rather than trade the other way.
+
+**Scheduling.** Each bot keeps its next wake time. A priority queue orders the bots by wake time, then by a fixed bot key, so ties break the same way every run. The runner takes the earliest bot, moves the clock to its wake (ticking for every grid point on the way, then `advance` for the rest), lets it act once, and draws its next wake. Gaps are exponential, so wakes arrive like independent orders, except inside a spoofing scheme, where the spoofer's steps come 1 to 3 seconds apart, so each fake order lives 2 to 6 seconds. A market maker's re-quote is four calls at one instant (two cancels, two orders), which is how a real maker behaves.
 
 **Random streams.** No two bots share a random stream. Each bot has a timing stream and a decision stream, seeded by hashing the run's seed with the bot's key (its kind's fixed id and its number) and the stream's purpose, with SplitMix64. `StrictMath` keeps the arithmetic identical across machines. Because a bot's wakes come from its own timing stream, removing one bot, or changing what another one decided, can't shift anyone else's schedule. That's what a counterfactual needs: run the market with and without the cheater, and the gap between the two is the cheater's effect. What other bots *decide* can still change, because they react to a different market, and that's the effect being measured.
 
-**Hiding who is who.** Accounts are opened in an order shuffled by the run's setup stream and named `trader_0001` upward, so account ids and names carry no information about the bot. The `answer_key` table maps each account to its bot name, kind and whether it cheats. It's for grading only: a detector reads orders, trades and events.
+**The spoofer.** Each scheme (an episode) is three steps. First it stacks large limit orders (four by default, each 8% of its cash) a cent apart, starting a cent behind the best price on the fake side. Then it posts a real order of 2% of its cash on the other side, a cent inside the spread, so it's first in line. Finally it cancels the fakes, and the real order if it hasn't filled. To sell it fakes demand, and to buy back it fakes supply, depending on whether it holds more or less than it started with. It works two stocks chosen by its seed and rests about 40 seconds between schemes. The fakes are exposed: a seller who hits them trades with the spoofer for real, and that happens to a few percent of them.
 
-**Simplifications.** Market makers see the feed price, as a stand-in for the private information real makers trade on, while noise traders see only the book. Noise traders are uniformly random, with no momentum or herding. Everything is long-only: a bot that wants to sell what it doesn't hold does nothing, rather than buying instead, which would tilt the market upward (an early version did that and drifted 4.7% above the feed in an hour). Bots act one at a time, which is what makes a run exact, and it caps a run at about 700 actions a second.
+**Who pays, and the control.** Spoofing only pays if someone reacts to the fake orders. A book market has no house to fool, and the makers quote off the feed, so the victims are the book readers. To check the effect really comes from the fakes, `spoofLayers` sets the number of layers, and 0 runs the control: the same bot, with the same timing and real orders, but nothing fake. The control is honest, so the answer key marks it as such. It's also the hardest innocent account a detector will meet. The measured comparison is in the README.
+
+**The answer key.** Accounts are opened in an order shuffled by the run's setup stream and named `trader_0001` upward, so account ids and names carry no information about the bot. The `answer_key` table maps each account to its bot name, kind and whether it cheats. `answer_key_orders` labels every order a spoofer placed as `SPOOF` or `REAL`, with its episode number, so a detector can be graded on the exact orders it flags, not only on accounts. Both are for grading only: a detector reads orders, trades and events.
+
+**Trading P&L.** The report scores each kind at the feed price. It takes each account's value at the end and subtracts the value it would have had by just holding its starting shares. So a stock that happened to drift up or down doesn't count as anyone's skill or loss.
+
+**Simplifications.** Noise traders are uniformly random, with no momentum or herding. Everything is long-only. Bots act one at a time, which is what makes a run exact, and it caps a run at about 700 actions a second. One spoofing pattern (layering) is built so far; wash trading and pump-and-dump are next.
 
 ## Checks
 

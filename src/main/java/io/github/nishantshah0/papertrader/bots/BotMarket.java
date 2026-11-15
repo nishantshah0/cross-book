@@ -28,18 +28,20 @@ final class BotMarket {
     private final QuoteCache quotes;
     private final PositionRepository positions;
     private final Simulation simulation;
+    private final AnswerKey answerKey;
     final List<String> symbols;
     final BigDecimal startingCash;
 
     long actions, placed, refused, cancelled, cancelsTooLate;
 
     BotMarket(OrderService orders, MatchingEngine engine, QuoteCache quotes, PositionRepository positions,
-            Simulation simulation, List<String> symbols, BigDecimal startingCash) {
+            Simulation simulation, AnswerKey answerKey, List<String> symbols, BigDecimal startingCash) {
         this.orders = orders;
         this.engine = engine;
         this.quotes = quotes;
         this.positions = positions;
         this.simulation = simulation;
+        this.answerKey = answerKey;
         this.symbols = symbols;
         this.startingCash = startingCash;
     }
@@ -66,6 +68,20 @@ final class BotMarket {
             return (bid.get().doubleValue() + ask.get().doubleValue()) / 2;
         }
         return engine.lastPrice(symbol).map(BigDecimal::doubleValue).orElseGet(() -> feed(symbol));
+    }
+
+    // Shares resting on each side within the top levels: what a trader reading the book
+    // sees. The imbalance runs from -1 (all asks) to +1 (all bids), 0 for an empty book.
+    double imbalance(String symbol, int levels) {
+        var book = engine.book(symbol, levels);
+        long bids = book.bids().stream().mapToLong(Level::quantity).sum();
+        long asks = book.asks().stream().mapToLong(Level::quantity).sum();
+        return bids + asks == 0 ? 0 : (double) (bids - asks) / (bids + asks);
+    }
+
+    // marks a cheater's order in the answer key, for grading a detector order by order
+    void label(Order order, int episode, String role) {
+        answerKey.addOrder(order, episode, role);
     }
 
     int shares(long accountId, String symbol) {

@@ -75,7 +75,7 @@ public class BotRunner {
         simulation.reset(run.seed()); // refuses unless the clock is simulated
         long started = System.nanoTime();
 
-        BotMarket market = new BotMarket(orders, engine, quotes, positions, simulation, symbols,
+        BotMarket market = new BotMarket(orders, engine, quotes, positions, simulation, answerKey, symbols,
                 properties.startingCash());
         List<Bot> roster = roster(run, symbols);
         List<Bot> joining = shuffled(roster, Seeds.stream(run.seed(), 0, Seeds.SETUP));
@@ -109,23 +109,37 @@ public class BotRunner {
         return report(run, symbols, market, start, seconds);
     }
 
-    // The roster, by kind and number. Makers split the symbols so each symbol has about
-    // two of them, the way real market makers each cover a handful of names.
+    // The roster, by kind and number. Makers and value traders each split the symbols so
+    // every symbol has about two of each, the way real firms each cover a handful of names.
     private static List<Bot> roster(BotRunRequest run, List<String> symbols) {
         List<Bot> roster = new ArrayList<>();
-        int makers = run.marketMakers();
-        int each = makers == 0 ? 0 : Math.min(symbols.size(), Math.max(1, (2 * symbols.size() + makers - 1) / makers));
-        for (int i = 0; i < makers; i++) {
-            List<String> covers = new ArrayList<>();
-            for (int j = 0; j < each; j++) {
-                covers.add(symbols.get((i * each + j) % symbols.size()));
-            }
-            roster.add(new MarketMaker(i, run.seed(), List.copyOf(covers)));
+        for (int i = 0; i < run.marketMakers(); i++) {
+            roster.add(new MarketMaker(i, run.seed(), covers(i, run.marketMakers(), symbols)));
         }
         for (int i = 0; i < run.noiseTraders(); i++) {
             roster.add(new NoiseTrader(i, run.seed()));
         }
+        for (int i = 0; i < run.bookReaders(); i++) {
+            roster.add(new BookReader(i, run.seed()));
+        }
+        for (int i = 0; i < run.valueTraders(); i++) {
+            roster.add(new ValueTrader(i, run.seed(), covers(i, run.valueTraders(), symbols)));
+        }
+        for (int i = 0; i < run.spoofers(); i++) {
+            roster.add(new Spoofer(i, run.seed(), run.spoofLayers()));
+        }
         return roster;
+    }
+
+    // the stocks the i-th of n bots of a kind follows: consecutive runs of symbols, about
+    // two bots of the kind per symbol
+    private static List<String> covers(int i, int n, List<String> symbols) {
+        int each = Math.min(symbols.size(), Math.max(1, (2 * symbols.size() + n - 1) / n));
+        List<String> covers = new ArrayList<>();
+        for (int j = 0; j < each; j++) {
+            covers.add(symbols.get((i * each + j) % symbols.size()));
+        }
+        return List.copyOf(covers);
     }
 
     // Moves the clock to a wake time: ticks for every tick at or before it, then
@@ -185,9 +199,52 @@ public class BotRunner {
             prices.add(new BotRunReport.SymbolSummary(symbol, feed, last, gap, counts[0], counts[1]));
         }
         long trades = prices.stream().mapToLong(BotRunReport.SymbolSummary::trades).sum();
-        return new BotRunReport(run.seed(), run.ticks(), run.noiseTraders(), run.marketMakers(), symbols, start,
-                simulation.status().now(), market.actions, market.placed, market.refused, market.cancelled,
-                market.cancelsTooLate, trades, prices, ledger.run().balanced(), Math.round(seconds * 100) / 100.0,
-                Math.round(market.actions / seconds));
+        return new BotRunReport(run.seed(), run.ticks(), run.noiseTraders(), run.marketMakers(), run.bookReaders(),
+                run.valueTraders(), run.spoofers(), run.spoofLayers(), symbols, start, simulation.status().now(), market.actions, market.placed,
+                market.refused, market.cancelled, market.cancelsTooLate, trades, prices, kinds(),
+                ledger.run().balanced(), Math.round(seconds * 100) / 100.0, Math.round(market.actions / seconds));
+    }
+
+    // Trading P&L by kind, at the feed price: the end value of each account, less the end
+    // value of the cash and starting shares it had once allocations were done.
+    private List<BotRunReport.KindSummary> kinds() {
+        Map<String, BigDecimal> feed = new HashMap<>();
+        quotes.all().forEach(q -> feed.put(q.symbol(), q.price()));
+        Map<Long, BigDecimal> value = new HashMap<>();
+        Map<Long, BotKind> kindOf = new HashMap<>();
+        jdbc.query("""
+                select k.account_id, k.kind, a.cash - a.starting_cash as cash
+                from answer_key k join accounts a on a.id = k.account_id
+                """, row -> {
+            kindOf.put(row.getLong("account_id"), BotKind.valueOf(row.getString("kind")));
+            value.put(row.getLong("account_id"), row.getBigDecimal("cash"));
+        });
+        // what it holds now, at the feed
+        jdbc.query("select account_id, symbol, quantity from positions", row -> {
+            value.merge(row.getLong("account_id"),
+                    feed.get(row.getString("symbol")).multiply(BigDecimal.valueOf(row.getLong("quantity"))),
+                    BigDecimal::add);
+        });
+        // less the starting shares at the feed, plus the cash they cost (allocations are
+        // the only trades without a counterparty order in book mode)
+        jdbc.query("""
+                select account_id, symbol, sum(quantity) as shares, sum(quantity * price) as cost
+                from trades where counterparty_order_id is null
+                group by account_id, symbol
+                """, row -> {
+            BigDecimal held = feed.get(row.getString("symbol")).multiply(BigDecimal.valueOf(row.getLong("shares")));
+            value.merge(row.getLong("account_id"), row.getBigDecimal("cost").subtract(held), BigDecimal::add);
+        });
+        Map<BotKind, BigDecimal> total = new java.util.EnumMap<>(BotKind.class);
+        Map<BotKind, Integer> bots = new java.util.EnumMap<>(BotKind.class);
+        kindOf.forEach((account, kind) -> {
+            total.merge(kind, value.get(account), BigDecimal::add);
+            bots.merge(kind, 1, Integer::sum);
+        });
+        List<BotRunReport.KindSummary> kinds = new ArrayList<>();
+        total.forEach((kind, pnl) -> kinds.add(new BotRunReport.KindSummary(kind, bots.get(kind),
+                pnl.setScale(2, java.math.RoundingMode.HALF_UP),
+                pnl.divide(BigDecimal.valueOf(bots.get(kind)), 2, java.math.RoundingMode.HALF_UP))));
+        return kinds;
     }
 }

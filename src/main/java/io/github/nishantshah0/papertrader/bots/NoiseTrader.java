@@ -27,10 +27,7 @@ final class NoiseTrader extends Bot {
 
     @Override
     void allocate(BotMarket market) {
-        double each = market.startingCash.doubleValue() * STARTING_STAKE / market.symbols.size();
-        for (String symbol : market.symbols) {
-            market.allocate(accountId, symbol, (int) (each / market.feed(symbol)));
-        }
+        hold(market, market.symbols, STARTING_STAKE);
     }
 
     @Override
@@ -48,14 +45,11 @@ final class NoiseTrader extends Bot {
         boolean take = random.nextDouble() < TAKE;
         double offset = random.nextDouble() * MAX_OFFSET_BPS / 10_000;
 
-        if (side == OrderSide.SELL) {
-            // it cannot sell what it has not got, and it does not buy instead: that would
-            // tilt the whole market towards buying
-            int held = market.shares(accountId, symbol);
-            if (held == 0) {
-                return;
-            }
-            shares = Math.min(shares, held);
+        // at its limit it does nothing, rather than trade the other way: that would tilt
+        // the whole market
+        shares = room(market, symbol, side, shares);
+        if (shares == 0) {
+            return;
         }
         boolean otherSide = (side == OrderSide.BUY ? market.bestAsk(symbol) : market.bestBid(symbol)).isPresent();
         if (take && otherSide) {

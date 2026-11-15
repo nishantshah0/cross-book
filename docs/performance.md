@@ -1,6 +1,6 @@
 # Performance baseline
 
-How much load PaperTrader takes before any bots exist, and what limits it. This is the
+How much load CrossBook takes before any bots exist, and what limits it. This is the
 "before" for the stress test later.
 
 ## Setup
@@ -107,9 +107,8 @@ the sequences would hand out different ids on a replay. That is not worth breaki
 exact replays for.
 
 The real bot runner (`BotRunner`, see the architecture notes) lands in the same place.
-Its default market, 100 noise traders and 8 market makers on twelve stocks for an hour
-of market time, took 45,423 actions in 64 seconds with seed 1 (about 710 a second) and
-45,899 in 61 seconds with seed 2 (750 a second), on a fresh database.
+Its default market, 140 bots on twelve stocks for an hour of market time, took 48,885
+actions in 68 seconds with seed 1 (about 715 a second), on a fresh database.
 
 At this speed a run of 150,000 bot actions takes about four minutes. Independent runs,
 one per seed, can go in parallel on separate databases, which is how scoring across many

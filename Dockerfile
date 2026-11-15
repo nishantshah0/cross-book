@@ -16,7 +16,7 @@ RUN mvn -B -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 RUN addgroup -S trader && adduser -S trader -G trader
-COPY --from=backend /app/target/paper-trader-*.jar app.jar
+COPY --from=backend /app/target/cross-book-*.jar app.jar
 USER trader
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

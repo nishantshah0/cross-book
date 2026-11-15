@@ -29,4 +29,9 @@ class BotController {
     List<AnswerKey.Entry> answerKey() {
         return answerKey.entries();
     }
+
+    @GetMapping("/api/bots/answer-key/orders")
+    List<AnswerKey.LabelledOrder> labelledOrders() {
+        return answerKey.orders();
+    }
 }
