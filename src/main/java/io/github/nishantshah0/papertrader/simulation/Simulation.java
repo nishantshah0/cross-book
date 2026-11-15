@@ -105,8 +105,13 @@ public class Simulation {
         return engine.allocate(accountId, symbol, shares);
     }
 
-    private Instant nextTick() {
+    // when the next tick will land; anything due at or after it has to wait for the tick
+    public synchronized Instant nextTick() {
         return start.plus(step.multipliedBy(ticks + 1));
+    }
+
+    public Duration step() {
+        return step;
     }
 
     // Starts a fresh run: every account, order, trade and event is deleted, the books and
@@ -116,7 +121,7 @@ public class Simulation {
     public synchronized void reset(long seed) {
         SimulationClock simulated = requireSimulated();
         engine.reset();
-        jdbc.execute("truncate table order_events, trades, positions, house_positions, orders, accounts, users "
+        jdbc.execute("truncate table answer_key, order_events, trades, positions, house_positions, orders, accounts, users "
                 + "restart identity cascade");
         simulated.set(start);
         quotes.reset();

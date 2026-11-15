@@ -106,6 +106,11 @@ batch them, but the pool lives in the app's memory, so a simulation reset that r
 the sequences would hand out different ids on a replay. That is not worth breaking
 exact replays for.
 
+The real bot runner (`BotRunner`, see the architecture notes) lands in the same place.
+Its default market, 100 noise traders and 8 market makers on twelve stocks for an hour
+of market time, took 45,423 actions in 64 seconds with seed 1 (about 710 a second) and
+45,899 in 61 seconds with seed 2 (750 a second), on a fresh database.
+
 At this speed a run of 150,000 bot actions takes about four minutes. Independent runs,
 one per seed, can go in parallel on separate databases, which is how scoring across many
 seeds should scale.

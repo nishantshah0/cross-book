@@ -180,6 +180,18 @@ Between ticks, `Simulation.advance` (`POST /api/simulation/advance?millis=`) mov
 
 A simulated clock refuses live quotes, which have their own timestamps.
 
+## Bot markets
+
+`BotRunner.run` builds a market from a seed and a roster (noise traders and market makers) and runs it to the end in one call. It refuses unless the app is in book mode on a simulated clock, and it starts with `Simulation.reset(seed)`, so every run starts from the same empty exchange.
+
+**Scheduling.** Each bot keeps its next wake time. A priority queue orders the bots by wake time, then by a fixed bot key, so ties break the same way every run. The runner takes the earliest bot, moves the clock to its wake (ticking for every grid point on the way, then `advance` for the rest), lets it act once, and draws its next wake. Gaps are exponential, so wakes arrive like independent orders. A market maker's re-quote is four calls at one instant (two cancels, two orders), which is how a real maker behaves.
+
+**Random streams.** No two bots share a random stream. Each bot has a timing stream and a decision stream, seeded by hashing the run's seed with the bot's key (its kind's fixed id and its number) and the stream's purpose, with SplitMix64. `StrictMath` keeps the arithmetic identical across machines. Because a bot's wakes come from its own timing stream, removing one bot, or changing what another one decided, can't shift anyone else's schedule. That's what a counterfactual needs: run the market with and without the cheater, and the gap between the two is the cheater's effect. What other bots *decide* can still change, because they react to a different market, and that's the effect being measured.
+
+**Hiding who is who.** Accounts are opened in an order shuffled by the run's setup stream and named `trader_0001` upward, so account ids and names carry no information about the bot. The `answer_key` table maps each account to its bot name, kind and whether it cheats. It's for grading only: a detector reads orders, trades and events.
+
+**Simplifications.** Market makers see the feed price, as a stand-in for the private information real makers trade on, while noise traders see only the book. Noise traders are uniformly random, with no momentum or herding. Everything is long-only: a bot that wants to sell what it doesn't hold does nothing, rather than buying instead, which would tilt the market upward (an early version did that and drifted 4.7% above the feed in an hour). Bots act one at a time, which is what makes a run exact, and it caps a run at about 700 actions a second.
+
 ## Checks
 
 JUnit/Testcontainers exercises real Postgres migrations and transactional behavior, and audits the ledger and event log after every integration test. The coverage includes concurrent orders, idempotent retries, user-to-user fills across several resting orders and the house, partial fills and cancels, self-trade refusal, and two matcher threads trading between the same accounts at once. The book and engine have unit tests for price-time priority, house priority and when book changes are applied. A scheduled integration test changes a quote and waits for the matcher to fill without another order request. Playwright runs against the packaged app, including two independently subscribed browser tabs, cancellation, server validation, and mobile overflow checks.

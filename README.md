@@ -115,6 +115,28 @@ Set `MARKET_MODE=book` and the house is gone: orders only trade with each other,
 - Positions are valued at the last trade, not the feed. Buying through thin asks moves the price as far as the book lets it, and it stays there until someone trades it back.
 - A book market has no other source of shares, so a simulated run starts by allocating them (see [Simulated time](#simulated-time)).
 
+### Bot markets
+
+One command runs a whole market of simulated traders, in book mode on the simulated clock:
+
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.profiles=bots   # wipes the local database first
+```
+
+It resets the exchange, runs 100 noise traders and 8 market makers across all twelve stocks for an hour of market time, logs a report, and leaves the app up so you can browse the result. `BOT_SEED`, `BOT_TICKS`, `BOT_NOISE_TRADERS` and `BOT_MARKET_MAKERS` change the run, and `POST /api/bots/runs` starts one from a running app.
+
+- **Noise traders** buy and sell at random, in random sizes. Some orders take what the book offers and some are limit orders a little off the middle, and they give up on old ones. They only see the book and the last trade.
+- **Market makers** each quote a few stocks around the feed price, which only they see. They pull and re-post their quotes, shifted against their inventory. They're what keeps trading anchored to the feed.
+
+In a measured run (seed 1, defaults), 108 bots took 45,423 actions in 64 seconds: 10,324 trades between bots, 15 refused orders and a balanced ledger. Every stock's last trade ended within 31 bps of its feed price. The bots call the order service directly rather than going over HTTP, so their orders are checked, matched, logged and audited like anyone's.
+
+What makes a run usable for grading a detector:
+
+- **It replays exactly.** The same request writes the same rows, down to the ids and the millisecond timestamps. A test runs a market twice and compares a hash of every event, trade and balance.
+- **Bots don't share random numbers.** Each bot has its own random streams, seeded from the run's seed and the bot's name: one for when it wakes and one for what it does. Rerunning a market without one bot leaves every other bot's schedule exactly as it was, so the difference is that bot's effect.
+- **Bots act through each tick.** Each bot wakes at random intervals (exponential gaps), and the clock moves to each wake, so the event log has realistic timing between orders and cancels.
+- **Only the answer key says who is who.** Accounts are named `trader_0001` and up, opened in an order shuffled by the seed, so neither the name nor the id gives a bot away. The `answer_key` table records each account's bot and kind for grading; a detector reads only the market data.
+
 **Reservations.** Open limit orders reserve what they still need: a buy holds its limit price times its remaining shares, and a sell holds its remaining shares. New orders can only use buying power and shares that aren't already reserved, so a resting order stays funded until it fills or is cancelled. Cancelling a partly filled order keeps what already filled.
 
 **Simplifications.** Fills are whole-share and long-only, with no commissions, shorting, or slippage beyond the house spread.
@@ -263,12 +285,13 @@ The schema is managed by Flyway, and Hibernate only validates it. Check constrai
 ```text
 src/main/java/.../papertrader/
 ├── account/      accounts and users
+├── bots/         the bot runner, noise traders, market makers and the answer key
 ├── ledger/       the ledger audit
 ├── portfolio/    portfolio valuation, P&L and the leaderboard
 ├── quote/        price feed, quote cache and history
 ├── trading/      order book, matching engine, order execution, positions
 └── web/          WebSocket config, events and error handling
-src/main/resources/db/migration/   Flyway migrations, V1 to V6
+src/main/resources/db/migration/   Flyway migrations, V1 to V7
 frontend/src/                      React home page and trading terminal
 frontend/tests/                    Playwright browser and WebSocket tests
 frontend/cypress/                  Cypress buying-power tests
@@ -404,6 +427,8 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | POST   | `/api/simulation/ticks?count=`          | Advance a simulated clock by whole ticks   |
 | POST   | `/api/simulation/advance?millis=`       | Move a simulated clock within the current tick |
 | POST   | `/api/simulation/allocations?accountId=&symbol=&shares=` | Sell an account starting shares at the feed price (simulated clock only) |
+| POST   | `/api/bots/runs`                        | Run a whole bot market (book mode, simulated clock); returns the report |
+| GET    | `/api/bots/answer-key`                  | Which account is which bot, for grading     |
 | GET    | `/actuator/health`                      | Health check                               |
 
 <details>
@@ -431,7 +456,7 @@ Leave out `type` and `limitPrice` for a market order.
 
 ## What I'd do next
 
-- **Simulated traders.** Hundreds of bots, some honest and some manipulating the market, with a surveillance system that tries to catch the cheaters.
+- **Cheaters and a detector.** Bots that spoof, wash-trade and pump-and-dump among the honest ones, and a surveillance system graded against the answer key.
 - **More order types.** Stop orders, time-in-force (IOC, FOK, day) and amend-in-place.
 - **Persist quote history.** Chart history lives in memory and resets on restart.
 - **Authentication**, so it can be hosted publicly.

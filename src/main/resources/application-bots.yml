@@ -1,0 +1,16 @@
+# One command runs a whole bot market:  ./mvnw spring-boot:run -Dspring-boot.run.profiles=bots
+# It WIPES the database first (a simulation reset), then logs the run's report and
+# leaves the app up so the result can be browsed. BOT_SEED replays a run exactly.
+papertrader:
+  market:
+    mode: book
+  clock:
+    mode: simulated
+  feed:
+    mode: demo
+  bots:
+    run-on-start: true
+    seed: ${BOT_SEED:1}
+    ticks: ${BOT_TICKS:240}
+    noise-traders: ${BOT_NOISE_TRADERS:100}
+    market-makers: ${BOT_MARKET_MAKERS:8}
