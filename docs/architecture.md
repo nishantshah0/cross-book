@@ -39,13 +39,19 @@ Every quote also moves the house, and so does every placement and cancel, becaus
 
 ## Price impact
 
-`PriceImpact` holds the model, and the matcher applies it. All three effects are in basis points:
+`PriceImpact` holds the model and `HouseMarket` prices fills from it; the matcher keeps the state. All of it is in basis points.
 
-- **Size.** The house fills *q* shares at its touch price moved against the taker by `impact-bps` × √(*q* / `depth-shares`), rounded against the taker to four decimals, and capped at 50%. A limit order takes the largest number of shares whose price stays within the limit, worked out from the square root and then corrected for rounding.
-- **Flow.** Each matcher keeps a pressure figure for its symbol. After an order commits, it moves by the impact of the shares the taker filled, in the taker's direction, capped at ±5%. Each quote tick multiplies it by 1 − `impact-decay`. It lives in memory: it starts at zero, fades back to zero, and is lost on restart. Quote-driven fills of resting orders do not move it, which stops a falling price from cascading through resting bids.
+- **Flow.** Each matcher keeps one number for its symbol: the net shares users have bought from the house, negative when they have sold. The house's lean is `impact-bps` × √(|volume| / `depth-shares`) in the direction of the volume, capped at ±5%. Every fill against the house moves the volume by its shares, and each quote tick multiplies it by 1 − `impact-decay`. It lives in memory: it starts at zero, fades back to zero, and is lost on restart.
+- **Size.** A fill pays the lean averaged over the stretch of the curve it walks, from the volume it starts at to the one it leaves, so a single order of `depth-shares` from zero pays two thirds of the 10 basis points it moves the price. The price is the house's mid at that average, plus half the spread for a buy or minus it for a sell, rounded against the trader to four decimals. A limit order takes the largest number of shares whose price stays within its limit, found by binary search on the exact price.
 - **Book.** The house leans by `imbalance-bps` × (bids − asks) / (bids + asks + `depth-shares`), counting resting shares within 25 basis points of the feed price. Including the house's own depth in the denominator scales the lean by size: with the default 500 shares of depth, a lone 1-share bid leans the price 0.008 basis points, a 500-share bid 2, and only an imbalance far larger than the depth approaches the maximum. Without it, a single share on one side would lean the house as far as any spoof.
 
-The house's mid is the feed price × (1 + (flow + book) / 10,000), and its bid and ask sit half the spread either side. The taker pays the size cost before the price moves, so a round trip against the house always loses: a unit test tries sizes from 1 to 1,000,000 shares, split into as many as 20 orders, and none makes money. The book lean is the one deliberate weakness, because real markets have it: an integration test shows a spoofer's 900-share fake bid lifting the price it sells at by 3.6 basis points, while a 1-share bid moves it by less than a tenth of a cent.
+The house's mid is the feed price × (1 + (flow + book) / 10,000), and its touch (what it quotes for the next share) sits half the spread either side.
+
+Because the price is a function of the volume alone, what a sequence of fills pays is the area under the curve it walks, whatever the split. Walking out and back returns to where it started and covers the same area both ways, so a round trip loses exactly the spread plus rounding. An earlier version charged each order its own square-root cost but moved the price by the sum of those costs; separate small orders then pushed the price far more than they paid for, and a thousand one-share buys followed by one sale made about $2,000 on $100,000. A review caught it, and `PriceImpactTest` now attacks that case, uneven splits, selling first, starting from a volume others left, and 1,000 random sequences that end flat; none makes money. The fade is the one thing that can pay, and only against someone else's trading: selling into a price others pushed up and buying back once it fades takes their losses, through the house. Starting from a quiet market, the fade only ever pulls the price back against your own trades.
+
+Every fill against the house follows the curve, including resting orders its quote moves through. When a quote tick, a placement or a cancel moves the house's touch through a resting order, the matcher sweeps: the house fills as much of the order as its curve allows within the order's limit, at the curve price, and the rest stays in the book. Each of those fills moves the volume too, which pushes the house's price away from the next resting order rather than through it, so a sweep settles rather than cascades. An order resting exactly at the touch gets nothing: on the curve, not one share fits there.
+
+The book lean is the one deliberate weakness, because real markets have it: an integration test shows a spoofer's 900-share fake bid lifting the price it sells at by 3.6 basis points, while a 1-share bid moves it by less than a tenth of a cent.
 
 The lean is capped below half the spread (4 against 5 basis points by default). So a spoofer can sell at a better price than it would have got, but it can never lift the house's bid above where the mid was before it started. On its own the house is a weak target; a spoofer's real profit has to come from other traders who read the book and react to its fake orders. The cheater bots and the book-reading bots will need tuning against that.
 
@@ -63,7 +69,7 @@ Why a sorted map and not a heap: a heap gives the best price cheaply, but cancel
 
 ## One matcher per symbol
 
-Each symbol has a single-threaded executor that owns its book. Placements, cancels and quote-driven fills for that symbol all run on it, one at a time. Request threads hand their order over and wait for the result (up to 10 seconds, then 503), so within a symbol nothing can interleave: there is no lock on the book and no race between a fill and a cancel to reason about. Different symbols match in parallel on their own threads.
+Each symbol has a single-threaded executor that owns its book. Placements, cancels and quote-driven fills for that symbol all run on it, one at a time. Request threads hand their order over and wait for the result, so within a symbol nothing can interleave: there is no lock on the book and no race between a fill and a cancel to reason about. Different symbols match in parallel on their own threads.
 
 The request thread holds no transaction while it waits. Only the matcher thread opens one, so waiting requests cannot use up the connection pool.
 
@@ -114,9 +120,15 @@ Migration V6 rebuilds the log for orders placed before it existed, from their cr
 
 `GET /api/events` pages through the log by seq, optionally for one symbol or account. It shows every account's activity, which suits a local practice app with no authentication; a public deployment would restrict it.
 
+### Waiting, timing out and reading
+
+A request waits up to `papertrader.engine.timeout-ms` (10 seconds) for its task. If the task is still queued when the wait runs out, it is abandoned before it starts and the client gets a 503: so a 503 always means nothing happened, and the request is safe to retry. If the task has already started, it is inside its transaction and will finish, so the request waits for its real result instead of reporting a failure that may not be true. `Future.cancel` cannot tell those two cases apart (it reports success on a running task too), so the task and the waiting caller race to move a shared flag out of "queued": the task runs only if it wins, and the caller returns 503 only if it does.
+
+Reads never queue. After every change, each matcher publishes an immutable snapshot of its book, the house's quote and its lean, and `GET /api/book`, the house price for a size and the lean all read the latest one. The book on screen can be one change behind the matcher, never torn.
+
 ## Safe retries
 
-The optional idempotency key is scoped to the account and limited to 128 characters. Placement looks up an existing key before planning fills or checking balances. Retries of the same order run on the same matcher thread one after another, so the second always sees the first. Matching payloads return the existing order (including its latest status); changed payloads return 409. A partial unique index provides a second line of defense.
+The optional idempotency key is scoped to the account and limited to 128 characters. Placement looks up an existing key before planning fills or checking balances. Retries of the same order run on the same matcher thread one after another, so the second always sees the first. Matching payloads return the existing order (including its latest status); changed payloads return 409. A partial unique index provides a second line of defense: the key is checked before the order's account is locked, so the same key sent on two symbols at once reaches two matchers and both can pass the check. The index stops the second insert, and placement turns that into the same 409 a sequential retry would get; a test races the two symbols twenty times and checks every loser gets it.
 
 The browser retains a failed request's key until that payload changes or succeeds. Account switching clears pending retries. This prevents a network timeout followed by a retry from creating two fills.
 

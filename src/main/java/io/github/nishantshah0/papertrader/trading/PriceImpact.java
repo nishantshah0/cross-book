@@ -1,38 +1,32 @@
 package io.github.nishantshah0.papertrader.trading;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-// How trading moves prices. Three effects, all in basis points of the price:
+// How trading moves the house's prices. Everything is in basis points of the price.
 //
-// Size. The house prices a fill of q shares at its touch price moved by
-// impact * sqrt(q / depth): the square-root law that market impact follows in real
-// markets. Taking `depth` shares costs `impact` basis points; four times that costs
-// twice as much.
+// Flow. The house's mid leans by a curve of one number: the net shares users have
+// bought from it recently (negative when they have sold). The lean is
+// impact * sqrt(|volume| / depth), the square-root law real market impact follows, so
+// net buying of `depth` shares lifts the price `impact` basis points and four times
+// that lifts it twice as far. Volume fades towards zero by `decay` on every quote tick.
 //
-// Flow. After an order trades, the house's mid moves the same amount in the direction
-// the taker traded, then fades back towards the feed price by `decay` on every quote
-// tick. The taker pays the impact before the price moves, so a buy followed by an
-// immediate sell back always loses money.
+// A fill pays the average price along the curve between the volume it starts at and
+// the volume it leaves. That makes prices path-independent: buying 1,000 shares in one
+// order or in a thousand costs the same, and selling them back walks the same curve the
+// other way. A round trip can only lose the spread, however it is split.
 //
-// Book. The house leans its mid towards the side with more resting shares near the
-// price, by up to `imbalance` basis points. The lean is scaled by the house's own depth,
-// so it takes orders of a size that matters to move it: a lone 1-share bid barely
-// registers. Real market makers read the book the same way, which is why posting large
+// Book. The house also leans its mid towards the side with more resting shares near the
+// price, by up to `imbalance` basis points, scaled by its own depth so it takes real size
+// to move it. Real market makers read the book the same way, which is why posting large
 // orders you never mean to fill (spoofing) can pay.
 @Component
 public class PriceImpact {
 
-    // the most the flow can push the house's mid from the feed price
+    // the most the flow can lean the house's mid from the feed price
     static final double MAX_PRESSURE_BPS = 500;
-    // the most a single fill pays for its size
-    static final double MAX_FILL_BPS = 5_000;
     // resting orders count towards the book's lean within this distance of the feed price
     static final double IMBALANCE_WINDOW_BPS = 25;
-
-    private static final double BPS = 10_000;
 
     private final double impactBps;
     private final int depthShares;
@@ -61,62 +55,37 @@ public class PriceImpact {
         this.imbalanceBps = imbalanceBps;
     }
 
-    // no impact at all: the house trades any size at its quote, as it did before
+    // no impact at all: the house trades any size at its quote
     public static PriceImpact none() {
         return new PriceImpact(0, 1, 0, 0);
     }
 
-    // what trading this many shares costs, and then moves the price, in basis points
-    public double bps(int shares) {
-        if (impactBps == 0 || shares <= 0) {
+    // the lean, in basis points, once users have bought `volume` shares from the house net
+    public double pressureBps(double volume) {
+        if (impactBps == 0 || volume == 0) {
             return 0;
         }
-        return Math.min(MAX_FILL_BPS, impactBps * Math.sqrt((double) shares / depthShares));
+        return Math.signum(volume) * Math.min(MAX_PRESSURE_BPS, impactBps * Math.sqrt(Math.abs(volume) / depthShares));
     }
 
-    // the price the house fills this many shares at: its touch price, moved against the
-    // taker by the impact of the size, rounded against the taker to four decimals
-    public BigDecimal fillPrice(HouseQuote house, OrderSide side, int shares) {
-        BigDecimal touch = house.priceFor(side);
-        BigDecimal move = BigDecimal.valueOf(bps(shares) / BPS);
-        return side == OrderSide.BUY
-                ? touch.multiply(BigDecimal.ONE.add(move)).setScale(4, RoundingMode.CEILING)
-                : touch.multiply(BigDecimal.ONE.subtract(move)).setScale(4, RoundingMode.FLOOR);
+    // the average lean over a fill of `shares` on this side, starting from `volume`: the
+    // area under the curve between the two volumes, divided by the shares
+    public double averageBps(double volume, OrderSide side, int shares) {
+        if (shares <= 0) {
+            return pressureBps(volume);
+        }
+        double end = side == OrderSide.BUY ? volume + shares : volume - shares;
+        return (area(end) - area(volume)) / (end - volume);
     }
 
-    // The most shares, up to `wanted`, the house fills without passing the limit. A null
-    // limit is a market order, which takes them all.
-    public int fillable(HouseQuote house, OrderSide side, BigDecimal limit, int wanted) {
-        if (limit == null || wanted <= 0) {
-            return Math.max(wanted, 0);
-        }
-        BigDecimal touch = house.priceFor(side);
-        if (!within(side, touch, limit)) {
-            return 0;
-        }
-        if (impactBps == 0) {
-            return wanted;
-        }
-        double room = side == OrderSide.BUY
-                ? limit.doubleValue() / touch.doubleValue() - 1
-                : 1 - limit.doubleValue() / touch.doubleValue();
-        double estimate = depthShares * Math.pow(room * BPS / impactBps, 2);
-        int shares = (int) Math.min(wanted, Math.floor(estimate) + 1);
-        while (shares > 0 && !within(side, fillPrice(house, side, shares), limit)) {
-            shares--; // the estimate ignores rounding, so step back to the exact answer
-        }
-        return shares;
+    // the volume after users buy (positive) or sell (negative) this many shares
+    public double volumeAfter(double volume, OrderSide userSide, int shares) {
+        return userSide == OrderSide.BUY ? volume + shares : volume - shares;
     }
 
-    // the house's lean after a taker trades this many shares
-    public double pressureAfter(double pressureBps, OrderSide takerSide, int shares) {
-        double moved = pressureBps + (takerSide == OrderSide.BUY ? bps(shares) : -bps(shares));
-        return Math.max(-MAX_PRESSURE_BPS, Math.min(MAX_PRESSURE_BPS, moved));
-    }
-
-    // what is left of the lean after one quote tick
-    public double decayed(double pressureBps) {
-        return pressureBps * (1 - decay);
+    // what is left of the volume after one quote tick
+    public double decayed(double volume) {
+        return volume * (1 - decay);
     }
 
     // How far the book's resting orders lean the house's mid: up when bids outweigh asks.
@@ -126,8 +95,16 @@ public class PriceImpact {
         return imbalanceBps * (bidShares - askShares) / (bidShares + askShares + depthShares);
     }
 
-    private static boolean within(OrderSide side, BigDecimal price, BigDecimal limit) {
-        int cmp = price.compareTo(limit);
-        return side == OrderSide.BUY ? cmp <= 0 : cmp >= 0;
+    // The integral of pressureBps from zero to `volume`, including the flat part past the
+    // cap. The lean is symmetric, so this is the same for -v as for v: walking down from
+    // zero to -v covers the same area as walking up to v, just below the axis.
+    private double area(double volume) {
+        if (impactBps == 0 || volume == 0) {
+            return 0;
+        }
+        double v = Math.abs(volume);
+        double cap = depthShares * Math.pow(MAX_PRESSURE_BPS / impactBps, 2);
+        double curved = 2.0 / 3 * impactBps * Math.pow(Math.min(v, cap), 1.5) / Math.sqrt(depthShares);
+        return curved + MAX_PRESSURE_BPS * Math.max(0, v - cap);
     }
 }

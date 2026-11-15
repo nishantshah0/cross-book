@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,9 +37,10 @@ class OrderExecution {
         }
     }
 
-    // takerShares is how many shares the order filled as the taker in this transaction:
-    // what moves the price afterwards. Zero for a cancel, a quote-driven fill or a retry.
-    record Result(Order order, List<BookChange> changes, int takerShares) {
+    // houseVolume is how many shares users bought from the house in this transaction,
+    // negative when they sold to it: what moves the house's prices afterwards. Zero when
+    // the house was not involved, for a cancel, and for a retry.
+    record Result(Order order, List<BookChange> changes, int houseVolume) {
         Result(Order order, List<BookChange> changes) {
             this(order, changes, 0);
         }
@@ -58,20 +60,18 @@ class OrderExecution {
     private final PositionRepository positions;
     private final HousePositionRepository house;
     private final OrderEventRepository eventLog;
-    private final PriceImpact impact;
     private final Clock clock;
     private final ApplicationEventPublisher events;
 
     OrderExecution(AccountRepository accounts, OrderRepository orders, TradeRepository trades,
             PositionRepository positions, HousePositionRepository house, OrderEventRepository eventLog,
-            PriceImpact impact, Clock clock, ApplicationEventPublisher events) {
+            Clock clock, ApplicationEventPublisher events) {
         this.accounts = accounts;
         this.orders = orders;
         this.trades = trades;
         this.positions = positions;
         this.house = house;
         this.eventLog = eventLog;
-        this.impact = impact;
         this.clock = clock;
         this.events = events;
     }
@@ -85,7 +85,7 @@ class OrderExecution {
     // accounts at once cannot deadlock.
     @Transactional
     public Result place(Long accountId, PlaceOrderRequest request, String key, String symbol, OrderBook book,
-            HouseQuote house) {
+            HouseMarket house) {
         if (key != null) {
             if (key.isBlank() || key.length() > 128) {
                 throw new OrderRejectedException("Idempotency-Key must contain 1 to 128 characters");
@@ -109,7 +109,7 @@ class OrderExecution {
         }
 
         List<PlannedFill> planned = book.match(request.side(), request.limitPrice(), request.quantity(),
-                accountId, house);
+                accountId, house == null ? null : house.touch());
         TreeSet<Long> involved = new TreeSet<>();
         involved.add(accountId);
         planned.forEach(fill -> involved.add(fill.maker().accountId()));
@@ -122,10 +122,20 @@ class OrderExecution {
         // a market buy pays at most the house's price for its whole size, so that bounds
         // what it can cost
         BigDecimal worstPrice = type == OrderType.LIMIT ? order.getLimitPrice()
-                : impact.fillPrice(house, order.getSide(), order.getQuantity());
+                : house.price(order.getSide(), order.getQuantity());
         checkAvailable(account, order, worstPrice);
         order.setIdempotencyKey(key);
-        orders.save(order);
+        try {
+            orders.save(order);
+        } catch (DataIntegrityViolationException e) {
+            if (key == null) {
+                throw e;
+            }
+            // The key's unique index caught a placement on another symbol, run by another
+            // matcher, that committed after the check above. Its symbol differs, so it is a
+            // different order, and the answer is the same as if it had come first.
+            throw new OrderStateException("Idempotency-Key was already used for a different order");
+        }
         eventLog.save(OrderEvent.placed(order));
 
         List<BookChange> changes = new ArrayList<>();
@@ -149,12 +159,14 @@ class OrderExecution {
             changes.add(new BookChange.Reduce(maker.getId(), fill.quantity()));
             publish(maker);
         }
-        // the house prices what is left by its size, and a limit order takes only the
-        // shares that price keeps within its limit
+        // the house prices what is left along its impact curve, and a limit order takes
+        // only the shares that price keeps within its limit
+        int houseVolume = 0;
         if (order.isOpen() && house != null) {
-            int shares = impact.fillable(house, order.getSide(), order.getLimitPrice(), order.remainingQuantity());
+            int shares = house.fillable(order.getSide(), order.getLimitPrice(), order.remainingQuantity());
             if (shares > 0) {
-                settle(account, order, shares, impact.fillPrice(house, order.getSide(), shares), null, now);
+                settle(account, order, shares, house.price(order.getSide(), shares), null, now);
+                houseVolume = order.getSide() == OrderSide.BUY ? shares : -shares;
             }
         }
         if (order.isOpen()) {
@@ -166,7 +178,7 @@ class OrderExecution {
             }
         }
         publish(order);
-        return new Result(order, changes, order.getFilledQuantity());
+        return new Result(order, changes, houseVolume);
     }
 
     // An order refused before it was placed rolls back its own transaction, so the
@@ -178,10 +190,11 @@ class OrderExecution {
         }
     }
 
-    // A resting order the house quote now crosses fills in full at the touch price: it was
-    // resting, so the house came to it, and it pays nothing for size.
+    // A resting order the house's quote has moved through. The house fills as much of it
+    // as its curve allows within the order's limit, at the curve price, exactly as if the
+    // order had just arrived: resting gets no discount. What is left stays in the book.
     @Transactional
-    public Result fillAgainstHouse(RestingOrder resting, HouseQuote house) {
+    public Result fillAgainstHouse(RestingOrder resting, HouseMarket house) {
         Instant now = clock.instant();
         long orderId = resting.id();
         Account account = accounts.findByIdForUpdate(resting.accountId()).orElseThrow();
@@ -190,19 +203,21 @@ class OrderExecution {
         if (!order.isOpen()) {
             return new Result(order, List.of(new BookChange.Remove(orderId)));
         }
-        BigDecimal price = house == null ? null : house.priceFor(order.getSide());
-        if (price == null || !order.crosses(price)) {
+        int shares = house == null ? 0 : house.fillable(order.getSide(), order.getLimitPrice(), order.remainingQuantity());
+        if (shares == 0) {
             return new Result(order, List.of());
         }
-        if (!canSettle(account, order, order.remainingQuantity(), price)) {
+        BigDecimal price = house.price(order.getSide(), shares);
+        if (!canSettle(account, order, shares, price)) {
             order.reject(now);
-            eventLog.save(OrderEvent.rejected(order, "could not pay for a fill of " + order.remainingQuantity()
-                    + " at " + price));
-        } else {
-            settle(account, order, order.remainingQuantity(), price, null, now);
+            eventLog.save(OrderEvent.rejected(order, "could not pay for a fill of " + shares + " at " + price));
+            publish(order);
+            return new Result(order, List.of(new BookChange.Remove(orderId)));
         }
+        settle(account, order, shares, price, null, now);
         publish(order);
-        return new Result(order, List.of(new BookChange.Remove(orderId)));
+        BookChange change = order.isOpen() ? new BookChange.Reduce(orderId, shares) : new BookChange.Remove(orderId);
+        return new Result(order, List.of(change), order.getSide() == OrderSide.BUY ? shares : -shares);
     }
 
     @Transactional

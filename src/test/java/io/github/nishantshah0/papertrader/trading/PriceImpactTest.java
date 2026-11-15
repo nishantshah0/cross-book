@@ -5,60 +5,171 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 class PriceImpactTest {
 
-    // 20 basis points for 100 shares, half the lean gone each tick, up to 4 bps of lean
-    // from the book; the house quotes 10 bps wide around 100
+    // net buying of 100 shares leans the house 20 bps; half the volume fades each tick; up to
+    // 4 bps of lean from the book. The house quotes 10 bps wide around a feed price of 100.
     private final PriceImpact impact = new PriceImpact(20, 100, 0.5, 4);
-    private final HouseQuote house = HouseQuote.around(new BigDecimal("100"), 10);
 
     @Test
-    void sizeCostsGrowWithTheSquareRootOfTheShares() {
-        assertThat(impact.bps(100)).isEqualTo(20.0);
-        assertThat(impact.bps(400)).isEqualTo(40.0);
-        assertThat(impact.bps(25)).isEqualTo(10.0);
-        assertThat(impact.bps(0)).isZero();
-        assertThat(impact.bps(100_000_000)).isEqualTo(PriceImpact.MAX_FILL_BPS);
+    void theLeanFollowsTheSquareRootOfNetVolume() {
+        assertThat(impact.pressureBps(100)).isEqualTo(20.0);
+        assertThat(impact.pressureBps(400)).isEqualTo(40.0);
+        assertThat(impact.pressureBps(25)).isEqualTo(10.0);
+        assertThat(impact.pressureBps(-100)).isEqualTo(-20.0);
+        assertThat(impact.pressureBps(0)).isZero();
+        assertThat(impact.pressureBps(1e12)).isEqualTo(PriceImpact.MAX_PRESSURE_BPS);
+    }
+
+    // a fill pays the average of the curve it walks: two thirds of where it ends up
+    @Test
+    void aFillPaysTheAverageOfTheCurveItWalks() {
+        assertThat(impact.averageBps(0, OrderSide.BUY, 100)).isCloseTo(40.0 / 3, within(1e-9));
+        assertThat(impact.averageBps(0, OrderSide.SELL, 100)).isCloseTo(-40.0 / 3, within(1e-9));
+        // past the cap the curve is flat, so every further share pays the cap
+        double capped = 100 * Math.pow(PriceImpact.MAX_PRESSURE_BPS / 20, 2);
+        assertThat(impact.averageBps(capped + 1_000, OrderSide.BUY, 1_000))
+                .isCloseTo(PriceImpact.MAX_PRESSURE_BPS, within(1e-6));
     }
 
     @Test
-    void theHouseChargesForSizeAndRoundsAgainstTheTaker() {
-        assertThat(house.ask()).isEqualByComparingTo("100.05");
-        // 100.05 * 1.002 = 100.2501
-        assertThat(impact.fillPrice(house, OrderSide.BUY, 100)).isEqualByComparingTo("100.2501");
-        // 99.95 * 0.998 = 99.7501
-        assertThat(impact.fillPrice(house, OrderSide.SELL, 100)).isEqualByComparingTo("99.7501");
-        // 25 shares: 99.95 * 0.999 = 99.85005, rounded down for the seller
-        assertThat(impact.fillPrice(house, OrderSide.SELL, 25)).isEqualByComparingTo("99.8500");
+    void theHousePricesSizeAlongTheCurveAndRoundsAgainstTheTaker() {
+        HouseMarket house = market(0);
+        assertThat(house.touch().ask()).isEqualByComparingTo("100.05");
+        assertThat(house.touch().bid()).isEqualByComparingTo("99.95");
+        // 100 * (1 + 13.33 bps) * 1.0005
+        assertThat(house.price(OrderSide.BUY, 100).doubleValue()).isCloseTo(100.1834, within(0.0001));
+        assertThat(house.price(OrderSide.SELL, 100).doubleValue()).isCloseTo(99.8166, within(0.0001));
+        assertThat(house.price(OrderSide.BUY, 1)).isGreaterThanOrEqualTo(house.touch().ask());
+        assertThat(house.price(OrderSide.SELL, 1)).isLessThanOrEqualTo(house.touch().bid());
+        // once users have bought 100, the house's touch has moved 20 bps
+        assertThat(market(100).touch().ask()).isEqualByComparingTo("100.2501");
+    }
+
+    // The reviewer's finding: separate orders used to push the price further than one
+    // order of the same total size. Now the cost and the push depend only on the total.
+    @Test
+    void splittingAnOrderChangesNothing() {
+        double[] whole = {0}, pieces = {0};
+        double wholeCash = trade(whole, OrderSide.BUY, 1_000);
+        double pieceCash = 0;
+        for (int i = 0; i < 1_000; i++) {
+            pieceCash += trade(pieces, OrderSide.BUY, 1);
+        }
+        assertThat(pieces[0]).isEqualTo(whole[0]);
+        // Every fill rounds its price per share up to the next hundredth of a cent, so the
+        // two can differ by at most that much a share, in either direction: about the
+        // thousandth part of the spread a round trip pays.
+        assertThat(pieceCash).isCloseTo(wholeCash, within(1_000 * 0.0001));
+    }
+
+    @Test
+    void theReviewersRoundTripsNowLose() {
+        assertThat(roundTrip(0, split(1_000, 20), split(1_000, 1))).as("20 buys, 1 sell").isNegative();
+        assertThat(roundTrip(0, split(1_000, 1_000), split(1_000, 1))).as("1,000 one-share buys, 1 sell").isNegative();
+        assertThat(roundTrip(0, split(1_000, 1), split(1_000, 1_000))).as("1 buy, 1,000 one-share sells").isNegative();
+        assertThat(roundTrip(0, split(1_000, 20), split(1_000, 20))).as("20 buys, 20 sells").isNegative();
+    }
+
+    // With no time passing, any sequence of trades that ends holding what it started with
+    // loses money, from wherever other traders left the house: in random orders, sizes and
+    // splits, buying or selling first. Prices depend only on the volume, so walking out
+    // and back is free except for the spread and rounding, which both go against you.
+    @Test
+    void noSequenceThatEndsFlatMakesMoneyWithoutTimePassing() {
+        Random random = new Random(20261114);
+        for (int trial = 0; trial < 500; trial++) {
+            double start = random.nextInt(4_001) - 2_000;
+            assertThat(flatSequence(random, start, false)).as("trial %d", trial).isNegative();
+        }
+    }
+
+    // Starting from a quiet market, letting the price fade part way through does not help
+    // either: the fade pulls the price back towards where it started, against whatever
+    // your own trades did to it.
+    @Test
+    void noSequenceThatEndsFlatMakesMoneyFromAQuietMarketEvenAsPricesFade() {
+        Random random = new Random(1114);
+        for (int trial = 0; trial < 500; trial++) {
+            assertThat(flatSequence(random, 0, true)).as("trial %d", trial).isNegative();
+        }
+    }
+
+    // What fading does allow, deliberately: when other traders have pushed the price up,
+    // selling into it and buying back after it fades can pay. That money comes from those
+    // earlier buyers, through the house; it is trading, not a hole in the house's prices.
+    @Test
+    void tradingAgainstSomeoneElsesPushAsItFadesCanPay() {
+        double[] volume = {1_000}; // others bought 1,000 shares and lifted the price
+        double cash = trade(volume, OrderSide.SELL, 200);
+        for (int i = 0; i < 10; i++) {
+            volume[0] = impact.decayed(volume[0]);
+        }
+        cash += trade(volume, OrderSide.BUY, 200);
+        assertThat(cash).isPositive();
+    }
+
+    // random buys and sells that net to zero, from `start`, with quote ticks if `fading`
+    private double flatSequence(Random random, double start, boolean fading) {
+        double[] volume = {start};
+        List<Integer> moves = new ArrayList<>();
+        int total = 1 + random.nextInt(5_000);
+        for (int left = total; left > 0; ) {
+            int size = Math.min(left, 1 + random.nextInt(Math.max(1, total / (1 + random.nextInt(50)))));
+            moves.add(size);
+            moves.add(-size);
+            left -= size;
+        }
+        Collections.shuffle(moves, random);
+        if (random.nextBoolean()) {
+            moves.replaceAll(m -> -m);
+        }
+        double cash = 0;
+        for (int move : moves) {
+            cash += trade(volume, move > 0 ? OrderSide.BUY : OrderSide.SELL, Math.abs(move));
+            if (fading && random.nextInt(4) == 0) {
+                volume[0] = impact.decayed(volume[0]);
+            }
+        }
+        return cash;
     }
 
     @Test
     void aLimitTakesExactlyTheSharesItsPriceAllows() {
+        HouseMarket house = market(0);
         BigDecimal limit = new BigDecimal("100.10");
 
-        int shares = impact.fillable(house, OrderSide.BUY, limit, 400);
+        int shares = house.fillable(OrderSide.BUY, limit, 400);
 
-        assertThat(shares).isEqualTo(6);
-        assertThat(impact.fillPrice(house, OrderSide.BUY, shares)).isLessThanOrEqualTo(limit);
-        assertThat(impact.fillPrice(house, OrderSide.BUY, shares + 1)).isGreaterThan(limit);
-        assertThat(impact.fillable(house, OrderSide.BUY, limit, 4)).isEqualTo(4);
-        assertThat(impact.fillable(house, OrderSide.BUY, new BigDecimal("100.04"), 10)).isZero();
-        assertThat(impact.fillable(house, OrderSide.SELL, new BigDecimal("99.80"), 1_000))
-                .isEqualTo(56); // 99.95 * (1 - 20 * sqrt(56 / 100) / 10000) = 99.8004
-        assertThat(impact.fillable(house, OrderSide.BUY, null, 1_000)).isEqualTo(1_000);
-        assertThat(PriceImpact.none().fillable(house, OrderSide.BUY, new BigDecimal("100.05"), 1_000_000))
-                .isEqualTo(1_000_000);
+        assertThat(shares).isEqualTo(14);
+        assertThat(house.price(OrderSide.BUY, shares)).isLessThanOrEqualTo(limit);
+        assertThat(house.price(OrderSide.BUY, shares + 1)).isGreaterThan(limit);
+        assertThat(house.fillable(OrderSide.BUY, limit, 4)).isEqualTo(4);
+        assertThat(house.fillable(OrderSide.BUY, new BigDecimal("100.04"), 10)).isZero();
+        assertThat(house.fillable(OrderSide.BUY, null, 1_000)).isEqualTo(1_000);
+    }
+
+    // The reviewer's second finding: a sell resting exactly at the house's bid used to be
+    // filled in full at the bid by the next sweep, skipping the size cost. Priced on the
+    // curve, not even one share fits at the touch.
+    @Test
+    void anOrderRestingAtTheTouchGetsNoFreeFill() {
+        HouseMarket house = market(0);
+        assertThat(house.fillable(OrderSide.SELL, house.touch().bid(), 1_000)).isZero();
+        assertThat(house.fillable(OrderSide.BUY, house.touch().ask(), 1_000)).isZero();
     }
 
     @Test
-    void trafficPushesTheHouseAndTheLeanFades() {
-        double pushed = impact.pressureAfter(0, OrderSide.BUY, 100);
-        assertThat(pushed).isEqualTo(20.0);
-        assertThat(impact.pressureAfter(pushed, OrderSide.SELL, 400)).isEqualTo(-20.0);
-        assertThat(impact.decayed(pushed)).isEqualTo(10.0);
-        assertThat(impact.pressureAfter(0, OrderSide.BUY, 100_000_000)).isEqualTo(PriceImpact.MAX_PRESSURE_BPS);
+    void withNoImpactTheHouseTradesAnySizeAtItsQuote() {
+        HouseMarket house = new HouseMarket(new BigDecimal("100"), 0, 0, 10, PriceImpact.none());
+        assertThat(house.price(OrderSide.BUY, 1_000_000)).isEqualByComparingTo(house.touch().ask());
+        assertThat(house.fillable(OrderSide.SELL, house.touch().bid(), 1_000_000)).isEqualTo(1_000_000);
     }
 
     @Test
@@ -75,20 +186,15 @@ class PriceImpactTest {
     @Test
     void aTinyOrderBarelyLeansTheHouseAndOnlyBigOnesApproachTheMaximum() {
         assertThat(impact.imbalanceSkew(1, 0)).isLessThan(0.04); // 4 / 101
-        assertThat(impact.imbalanceSkew(100, 0)).isEqualTo(2.0); // as deep as the house: half the maximum
+        assertThat(impact.imbalanceSkew(100, 0)).isEqualTo(2.0);
         assertThat(impact.imbalanceSkew(900, 0)).isCloseTo(3.6, within(1e-12));
         assertThat(impact.imbalanceSkew(1_000_000, 0)).isLessThan(4.0).isGreaterThan(3.99);
     }
 
-    // The property that keeps the market honest: nobody can make money by trading with
-    // the house and immediately trading back, however they size or split the orders.
     @Test
-    void aRoundTripAgainstTheHouseNeverPays() {
-        for (int shares : new int[] {1, 7, 50, 100, 333, 1_000, 25_000, 1_000_000}) {
-            for (int pieces : new int[] {1, 2, 5, 20}) {
-                assertThat(roundTrip(shares, pieces)).as("%d shares in %d pieces", shares, pieces).isNegative();
-            }
-        }
+    void theVolumeFadesOnEachTick() {
+        assertThat(impact.decayed(100)).isEqualTo(50.0);
+        assertThat(impact.volumeAfter(10, OrderSide.SELL, 30)).isEqualTo(-20.0);
     }
 
     @Test
@@ -99,30 +205,34 @@ class PriceImpactTest {
         assertThatThrownBy(() -> new PriceImpact(20, 100, 0.5, 101)).isInstanceOf(IllegalArgumentException.class);
     }
 
-    // buy `shares` from the house in `pieces` orders, then sell them all back the same
-    // way, with the house leaning after every order as the engine does. Returns the cash
-    // made, which should never be positive.
-    private double roundTrip(int shares, int pieces) {
-        double cash = 0, pressure = 0;
-        int each = Math.max(1, shares / pieces);
-        int bought = 0;
-        while (bought < shares) {
-            int size = Math.min(each, shares - bought);
-            cash -= impact.fillPrice(quote(pressure), OrderSide.BUY, size).doubleValue() * size;
-            pressure = impact.pressureAfter(pressure, OrderSide.BUY, size);
-            bought += size;
+    private HouseMarket market(double volume) {
+        return new HouseMarket(new BigDecimal("100"), 0, volume, 10, impact);
+    }
+
+    // one fill against the house as the engine prices it; returns the cash it moves
+    private double trade(double[] volume, OrderSide side, int shares) {
+        BigDecimal price = market(volume[0]).price(side, shares);
+        volume[0] = impact.volumeAfter(volume[0], side, shares);
+        return (side == OrderSide.BUY ? -1 : 1) * price.doubleValue() * shares;
+    }
+
+    private double roundTrip(double startVolume, List<Integer> buys, List<Integer> sells) {
+        double[] volume = {startVolume};
+        double cash = 0;
+        for (int size : buys) {
+            cash += trade(volume, OrderSide.BUY, size);
         }
-        int sold = 0;
-        while (sold < shares) {
-            int size = Math.min(each, shares - sold);
-            cash += impact.fillPrice(quote(pressure), OrderSide.SELL, size).doubleValue() * size;
-            pressure = impact.pressureAfter(pressure, OrderSide.SELL, size);
-            sold += size;
+        for (int size : sells) {
+            cash += trade(volume, OrderSide.SELL, size);
         }
         return cash;
     }
 
-    private static HouseQuote quote(double pressureBps) {
-        return HouseQuote.around(new BigDecimal("100").multiply(BigDecimal.valueOf(1 + pressureBps / 10_000)), 10);
+    private static List<Integer> split(int shares, int pieces) {
+        List<Integer> sizes = new ArrayList<>();
+        for (int i = 0; i < pieces; i++) {
+            sizes.add(shares / pieces + (i < shares % pieces ? 1 : 0));
+        }
+        return sizes;
     }
 }

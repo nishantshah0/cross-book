@@ -86,8 +86,8 @@ Users meet inside the spread; an order priced through the house trades with the 
 
 The house is a market maker, not a bottomless wall of liquidity:
 
-- **Size costs more.** A fill of *q* shares costs the house's quote plus `HOUSE_IMPACT_BPS` × √(*q* / `HOUSE_DEPTH_SHARES`) basis points, the square-root law real market impact follows. By default, 500 shares cost 10 basis points more, and 2,000 shares cost 20.
-- **Trading moves the price.** After an order trades, the house's quote moves the same distance in the direction of the trade, then fades back towards the feed price by `HOUSE_IMPACT_DECAY` on every quote tick. You pay the impact before the price moves, so buying and immediately selling back always loses money, however the order is sized or split. A unit test checks exactly that.
+- **Trading moves the price.** The house's price depends on one number: how many shares users have bought from it, net, recently. It leans by `HOUSE_IMPACT_BPS` × √(net shares / `HOUSE_DEPTH_SHARES`), the square-root law real market impact follows. By default, net buying of 500 shares lifts the price 10 basis points, and 2,000 shares lift it 20. That volume fades towards zero by `HOUSE_IMPACT_DECAY` on every quote tick, so the price drifts back to the feed.
+- **Size costs more, and splitting doesn't help.** Each fill pays the house's price averaged along that curve, from where the volume was to where the fill leaves it. So buying 1,000 shares costs the same in one order as in a thousand, and selling them back walks the same curve the other way. A round trip can only lose the spread, however it's split. Unit tests attack this with uneven splits, one-share pieces, selling first and 1,000 random sequences, and none makes money. The one thing that can pay is selling into a price *other* traders pushed up and buying back after it fades: that's trading against their flow, not a hole in the house's prices.
 - **The book leans the quote.** The house shifts its quote towards whichever side has more resting shares within 0.25% of the price, as real market makers read order book imbalance. The lean is scaled by the house's depth, so it takes real size to move it: a 1-share bid leans the price by a few hundredths of a basis point, and only a very large imbalance approaches the `HOUSE_IMBALANCE_BPS` maximum. That makes spoofing possible but not free: a large bid that is never meant to fill lifts the price a seller gets, and it risks being filled. An integration test shows a 900-share fake bid letting the spoofer sell 3.6 basis points higher than an honest seller.
 
 <details>
@@ -164,7 +164,7 @@ sequenceDiagram
     X--)C: OrderChanged over the WebSocket, to every party
 ```
 
-The request thread holds no database connection while it waits for the matcher, and gives up with a 503 after 10 seconds, so a busy symbol can't drain the connection pool. If anything fails before the commit, the book is untouched and the client gets a problem response.
+The request thread holds no database connection while it waits for the matcher, so a busy symbol can't drain the connection pool. If the order hasn't started after 10 seconds, it's cancelled before it ever runs and the client gets a 503, which therefore always means nothing happened and the request is safe to retry. An order already running when the wait runs out is inside its transaction, so the client waits for its real result instead. If anything fails before the commit, the book is untouched and the client gets a problem response. Reading the book or the house's prices never waits at all: each matcher publishes a snapshot after every change.
 
 ### Concurrency and correctness
 

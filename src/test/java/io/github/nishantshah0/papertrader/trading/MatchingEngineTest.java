@@ -21,6 +21,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,11 +48,9 @@ class MatchingEngineTest {
                 .thenReturn(List.of(bid90, bid80));
         when(quotes.symbols()).thenReturn(Set.of("AAPL"));
         when(quotes.get("AAPL")).thenReturn(Optional.empty());
-        engine = new MatchingEngine(repository, execution, quotes, PriceImpact.none(), 0, Clock.systemUTC());
-        engine.rebuild();
-        // rebuild runs on the matcher thread; wait for it, so no test stubs a mock while
-        // that thread may still be calling it
-        engine.restingOrders("AAPL");
+        // engine() waits for the rebuild on the matcher thread, so no test stubs a mock
+        // while that thread may still be calling it
+        engine = engine(10_000);
     }
 
     @AfterEach
@@ -133,6 +133,77 @@ class MatchingEngineTest {
         engine.place(3L, request, null, "AAPL");
 
         assertThat(thread.get()).isEqualTo("match-AAPL");
+    }
+
+    // Reads come from the snapshot the matcher publishes after every change, so polling
+    // the book or the house's prices never queues behind an order in its transaction.
+    @Test
+    void readingTheBookDoesNotWaitBehindAnOrder() throws Exception {
+        when(execution.place(any(), any(), any(), any(), any(), any())).thenAnswer(call -> {
+            Thread.sleep(800);
+            return new Result(bid90, List.of());
+        });
+        var slow = Executors.newVirtualThreadPerTaskExecutor().submit(() -> engine.place(3L, request, null, "AAPL"));
+        Thread.sleep(100); // the order is now inside its transaction on the AAPL matcher
+
+        long start = System.nanoTime();
+        var book = engine.book("AAPL", 5);
+        engine.leanBps("AAPL");
+        engine.housePrice("AAPL", OrderSide.BUY, 10);
+        long millis = (System.nanoTime() - start) / 1_000_000;
+
+        assertThat(millis).isLessThan(200);
+        assertThat(book.bids()).hasSize(2);
+        assertThat(slow.get(5, TimeUnit.SECONDS)).isSameAs(bid90);
+    }
+
+    // A 503 must mean nothing happened. An order still queued when the wait runs out is
+    // cancelled before it starts, so retrying it is safe.
+    @Test
+    void anOrderStillQueuedWhenTheWaitRunsOutNeverRuns() throws Exception {
+        MatchingEngine impatient = engine(150);
+        try {
+            when(execution.place(any(), any(), any(), any(), any(), any())).thenAnswer(call -> {
+                Thread.sleep(500); // the first order holds the AAPL matcher
+                return new Result(bid90, List.of());
+            });
+            var first = Executors.newVirtualThreadPerTaskExecutor().submit(() -> impatient.place(1L, request, null, "AAPL"));
+            Thread.sleep(50);
+
+            assertThatThrownBy(() -> impatient.place(2L, request, null, "AAPL"))
+                    .isInstanceOf(EngineBusyException.class)
+                    .hasMessageContaining("nothing was done");
+            assertThat(first.get(5, TimeUnit.SECONDS)).isSameAs(bid90); // the first one ran past the wait
+            impatient.restingOrders("AAPL"); // let the matcher drain
+            verify(execution, times(1)).place(any(), any(), any(), any(), any(), any());
+        } finally {
+            impatient.stop();
+        }
+    }
+
+    // An order already running when the wait runs out is inside its transaction and will
+    // finish, so the caller gets its real outcome, not a 503 that might be untrue.
+    @Test
+    void anOrderAlreadyRunningWhenTheWaitRunsOutReturnsItsRealResult() {
+        MatchingEngine impatient = engine(100);
+        try {
+            when(execution.place(any(), any(), any(), any(), any(), any())).thenAnswer(call -> {
+                Thread.sleep(400);
+                return new Result(bid80, List.of());
+            });
+
+            assertThat(impatient.place(3L, request, null, "AAPL")).isSameAs(bid80);
+        } finally {
+            impatient.stop();
+        }
+    }
+
+    private MatchingEngine engine(long timeoutMs) {
+        MatchingEngine built = new MatchingEngine(repository, execution, quotes, PriceImpact.none(), 0,
+                Clock.systemUTC(), timeoutMs);
+        built.rebuild();
+        built.restingOrders("AAPL"); // wait for the rebuild before anything stubs a mock
+        return built;
     }
 
     private void quoteAt(String price) {
