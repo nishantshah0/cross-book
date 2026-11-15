@@ -3,6 +3,7 @@ package io.github.nishantshah0.papertrader.web;
 import io.github.nishantshah0.papertrader.NotFoundException;
 import io.github.nishantshah0.papertrader.account.UsernameTakenException;
 import io.github.nishantshah0.papertrader.quote.UnknownSymbolException;
+import io.github.nishantshah0.papertrader.simulation.BadStepException;
 import io.github.nishantshah0.papertrader.simulation.SimulationOffException;
 import io.github.nishantshah0.papertrader.trading.EngineBusyException;
 import io.github.nishantshah0.papertrader.trading.OrderRejectedException;
@@ -19,6 +20,11 @@ class ApiExceptionHandler {
     @ExceptionHandler({NotFoundException.class, UnknownSymbolException.class})
     ProblemDetail notFound(RuntimeException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+    }
+
+    @ExceptionHandler(BadStepException.class)
+    ProblemDetail badStep(BadStepException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
     @ExceptionHandler(OrderRejectedException.class)

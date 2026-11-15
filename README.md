@@ -106,6 +106,15 @@ This is the `usersInsideTheSpreadTradeWithEachOtherAndTheRestGoesToTheHouse` int
 
 </details>
 
+### Book mode: no house
+
+Set `MARKET_MODE=book` and the house is gone: orders only trade with each other, so trading alone sets the price. This is the mode for bot markets, where a pump has to be able to move the price and a manipulator's profit has to come from other traders.
+
+- A market order takes what the book holds and the rest is cancelled. With nothing on the other side, it's refused.
+- The feed keeps running as a reference value that traders can watch, but nothing is priced from it.
+- Positions are valued at the last trade, not the feed. Buying through thin asks moves the price as far as the book lets it, and it stays there until someone trades it back.
+- A book market has no other source of shares, so a simulated run starts by allocating them (see [Simulated time](#simulated-time)).
+
 **Reservations.** Open limit orders reserve what they still need: a buy holds its limit price times its remaining shares, and a sell holds its remaining shares. New orders can only use buying power and shares that aren't already reserved, so a resting order stays funded until it fills or is cancelled. Cancelling a partly filled order keeps what already filled.
 
 **Simplifications.** Fills are whole-share and long-only, with no commissions, shorting, or slippage beyond the house spread.
@@ -297,7 +306,14 @@ curl -X POST 'http://localhost:8080/api/simulation/ticks?count=40'   # ten minut
 curl http://localhost:8080/api/simulation                            # clock, time, ticks taken, feed seed
 ```
 
-Each tick moves the clock one feed interval, draws every stock's next price from the seeded walk, then lets each stock's matcher react in turn. Every timestamp the app writes comes from that clock. So a run that starts from the same `FEED_SEED` and places the same orders in the same order produces the same event log, prices, balances and timestamps, down to the database ids. An integration test runs a scripted session twice and compares all of it. On the normal wall clock, the tick endpoint answers 409.
+Each tick moves the clock to the next point on a fixed grid of feed intervals, draws every stock's next price from the seeded walk, then lets each stock's matcher react in turn. Between ticks, the clock can also move by less than a tick, so an order and its cancel a fraction of a second later get their own timestamps. A bot runner also needs to hand out starting shares, which are bought from the house at the feed price:
+
+```bash
+curl -X POST 'http://localhost:8080/api/simulation/advance?millis=250'                       # within the current tick
+curl -X POST 'http://localhost:8080/api/simulation/allocations?accountId=1&symbol=AAPL&shares=500'
+```
+
+ Every timestamp the app writes comes from that clock. So a run that starts from the same `FEED_SEED` and places the same orders in the same order produces the same event log, prices, balances and timestamps, down to the database ids. An integration test runs a scripted session twice and compares all of it. On the normal wall clock, the tick endpoint answers 409.
 
 <details>
 <summary><b>Using Finnhub</b></summary>
@@ -353,7 +369,9 @@ After every integration test, the ledger audit checks that the books still balan
 
 On an Apple M3 laptop, with the app and Postgres in Docker, the exchange handles about **2,000 orders a second** (2,500 requests a second with cancels). It reaches that with 10 simulated traders; past that, more traders only add waiting, taking p99 latency from 12 ms at 10 traders to 540 ms at 500. Every level finished with no errors and balanced books, across 134,000 trades.
 
-The limit is database round trips: about ten per order inside its transaction, with request threads queuing for the same connections. It isn't CPU, disk flushing, the connection pool size or the one-thread-per-stock design. Each of those was ruled out by changing it alone. The method, numbers and thread-dump findings are in [docs/performance.md](docs/performance.md), and the load generator is a single Java file:
+The limit is database round trips inside each order's transaction. It isn't CPU, disk flushing, the connection pool size or the one-thread-per-stock design. Each of those was ruled out by changing it alone.
+
+Bot runs that replay exactly have to act one at a time, so that speed is measured separately, in-process. Logging every SQL statement found a lazy-loading miss, a redundant existence check and repeated position reads. Fixing them cut statements per action from 11.4 to 7.7 and took a one-at-a-time bot market from 547 to 677 actions a second. `BotSpeedTest` fails if the count creeps back up. The method, numbers and thread-dump findings are in [docs/performance.md](docs/performance.md), and the load generator is a single Java file:
 
 ```bash
 java tools/loadtest/LoadTest.java --levels 1,10,50,200,500 --seconds 20
@@ -373,8 +391,8 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | GET    | `/api/accounts/{id}/orders/{orderId}`   | One order                                  |
 | DELETE | `/api/accounts/{id}/orders/{orderId}`   | Cancel an open order                       |
 | GET    | `/api/accounts/{id}/trades`             | Fills, newest first                        |
-| GET    | `/api/book/{symbol}`                    | Top 10 price levels and the house quote    |
-| GET    | `/api/book/{symbol}/house-price?side=&shares=` | The house's price per share for a size |
+| GET    | `/api/book/{symbol}`                    | Top 10 price levels, the house quote and the last trade |
+| GET    | `/api/book/{symbol}/estimate?side=&shares=` | What a market order of that size would pay per share |
 | GET    | `/api/quotes`, `/api/quotes/{symbol}`   | Cached quotes and timestamps               |
 | GET    | `/api/quotes/status`                    | Feed mode                                  |
 | GET    | `/api/quotes/history`                   | Up to 240 recent quotes per symbol         |
@@ -384,6 +402,8 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | GET    | `/api/ledger`                           | Run the ledger audit; the house's books    |
 | GET    | `/api/simulation`                       | Clock mode, time, ticks taken, feed seed   |
 | POST   | `/api/simulation/ticks?count=`          | Advance a simulated clock by whole ticks   |
+| POST   | `/api/simulation/advance?millis=`       | Move a simulated clock within the current tick |
+| POST   | `/api/simulation/allocations?accountId=&symbol=&shares=` | Sell an account starting shares at the feed price (simulated clock only) |
 | GET    | `/actuator/health`                      | Health check                               |
 
 <details>

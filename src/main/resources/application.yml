@@ -10,6 +10,12 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate # flyway owns the schema
+    properties:
+      hibernate:
+        # a fill updates two accounts, two orders and two positions; batching sends each
+        # kind in one round trip at commit. Inserts use identity keys, so they cannot batch.
+        jdbc.batch_size: 50
+        order_updates: true
   docker:
     compose:
       lifecycle-management: start-only # leave postgres up between runs
@@ -31,6 +37,11 @@ papertrader:
     # fixes the demo feed's random walk so a run's prices can be replayed; blank picks
     # a seed and logs it
     seed: ${FEED_SEED:}
+  # house: a simulated market maker quotes around the feed and trades what users leave.
+  # book: no house; orders only trade with each other, so trading alone sets prices and
+  # positions are valued at the last trade (see MarketMode and Marks)
+  market:
+    mode: ${MARKET_MODE:house}
   house:
     # the simulated market maker quotes this far either side of the feed price, in
     # basis points across the whole spread; users can trade inside it with each other

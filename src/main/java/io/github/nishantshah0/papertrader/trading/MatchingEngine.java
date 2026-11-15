@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,19 +51,24 @@ public class MatchingEngine {
 
     private final Map<String, Matcher> matchers = new ConcurrentHashMap<>();
     private final OrderRepository orders;
+    private final TradeRepository trades;
     private final OrderExecution execution;
     private final QuoteCache quotes;
     private final PriceImpact impact;
     private final int spreadBps;
+    private final MarketMode mode;
     // under a simulated clock, quote ticks are driven by the simulation in symbol order,
     // so the engine ignores the quote events it would otherwise react to on its own
     private final boolean simulated;
     private final Duration timeout;
 
-    MatchingEngine(OrderRepository orders, OrderExecution execution, QuoteCache quotes, PriceImpact impact,
-            @Value("${papertrader.house.spread-bps:10}") int spreadBps, Clock clock,
+    MatchingEngine(OrderRepository orders, TradeRepository trades, OrderExecution execution, QuoteCache quotes,
+            PriceImpact impact, @Value("${papertrader.house.spread-bps:10}") int spreadBps,
+            @Value("${papertrader.market.mode:house}") String mode, Clock clock,
             @Value("${papertrader.engine.timeout-ms:10000}") long timeoutMs) {
         this.orders = orders;
+        this.trades = trades;
+        this.mode = MarketMode.parse(mode);
         this.execution = execution;
         this.quotes = quotes;
         this.impact = impact;
@@ -73,9 +79,11 @@ public class MatchingEngine {
     }
 
     // feed is the price the house leans away from; flowBps and bookBps are how far recent
-    // trading and the resting orders lean it, so its mid is feed * (1 + (flow + book) / 10000)
-    public record BookView(String symbol, HouseQuote house, List<Level> bids, List<Level> asks, BigDecimal feed,
-            double flowBps, double bookBps) {
+    // trading and the resting orders lean it, so its mid is feed * (1 + (flow + book) / 10000).
+    // In book mode house is always null and the leans are zero. lastPrice is the most
+    // recent trade, null before the first.
+    public record BookView(String symbol, MarketMode market, HouseQuote house, List<Level> bids, List<Level> asks,
+            BigDecimal feed, double flowBps, double bookBps, BigDecimal lastPrice) {
     }
 
     // The book and the house as of the matcher's last change. Readers take the latest one
@@ -91,6 +99,8 @@ public class MatchingEngine {
         // prices lean (see PriceImpact). Only the matcher's own thread writes it; it fades
         // back to zero on every quote tick, so it is not stored.
         double volume;
+        // the price of the symbol's most recent trade, null before the first
+        volatile BigDecimal lastPrice;
         volatile Snapshot snapshot;
 
         Matcher(String symbol) {
@@ -153,6 +163,13 @@ public class MatchingEngine {
         });
     }
 
+    // shares bought from the house at the feed price, outside the market; see
+    // OrderExecution.allocate
+    public Order allocate(Long accountId, String symbol, int shares) {
+        return call(symbol, () -> apply(matcher(symbol),
+                execution.allocate(accountId, symbol, shares, quotes.require(symbol).price())));
+    }
+
     // fills one resting order against the current house quote, if it crosses
     public OrderStatus match(long orderId, String symbol) {
         return call(symbol, () -> {
@@ -203,6 +220,7 @@ public class MatchingEngine {
                 Matcher matcher = matcher(symbol);
                 matcher.book.clear();
                 matcher.volume = 0;
+                matcher.lastPrice = null;
                 refresh(matcher);
                 return null;
             });
@@ -211,8 +229,9 @@ public class MatchingEngine {
 
     public BookView book(String symbol, int levels) {
         BookView view = snapshot(symbol).view();
-        return new BookView(view.symbol(), view.house(), view.bids().stream().limit(levels).toList(),
-                view.asks().stream().limit(levels).toList(), view.feed(), view.flowBps(), view.bookBps());
+        return new BookView(view.symbol(), view.market(), view.house(), view.bids().stream().limit(levels).toList(),
+                view.asks().stream().limit(levels).toList(), view.feed(), view.flowBps(), view.bookBps(),
+                view.lastPrice());
     }
 
     public int restingOrders(String symbol) {
@@ -252,15 +271,35 @@ public class MatchingEngine {
                 rested++;
             }
         }
+        // in book mode the house's only trades are allocations, which are not market prices
+        matcher.lastPrice = (mode == MarketMode.BOOK
+                ? trades.findFirstBySymbolAndCounterpartyOrderIdIsNotNullOrderByIdDesc(symbol)
+                : trades.findFirstBySymbolOrderByIdDesc(symbol)).map(Trade::getPrice).orElse(null);
         log.info("{} book loaded with {} resting limit orders", symbol, rested);
         refresh(matcher);
     }
 
-    // what the house would charge per share for this many shares right now, or null while
-    // the quote is stale
-    public BigDecimal housePrice(String symbol, OrderSide side, int shares) {
-        HouseMarket house = snapshot(symbol).house();
-        return house == null ? null : house.price(side, shares);
+    // What a market order for this many shares would pay per share right now. In house
+    // mode it is the house's price, null while the quote is stale. In book mode it is the
+    // average over the resting orders it would take, null if the levels a snapshot keeps
+    // do not hold that many shares.
+    public BigDecimal estimatePrice(String symbol, OrderSide side, int shares) {
+        Snapshot snapshot = snapshot(symbol);
+        if (mode == MarketMode.HOUSE) {
+            return snapshot.house() == null ? null : snapshot.house().price(side, shares);
+        }
+        return OrderBook.averagePrice(side == OrderSide.BUY ? snapshot.view().asks() : snapshot.view().bids(), shares);
+    }
+
+    public MarketMode mode() {
+        return mode;
+    }
+
+    // the price of the symbol's most recent trade, if it has traded; read without
+    // waiting behind the matcher, and without starting one for an unknown symbol
+    public Optional<BigDecimal> lastPrice(String symbol) {
+        Matcher matcher = matchers.get(symbol);
+        return matcher == null ? Optional.empty() : Optional.ofNullable(matcher.lastPrice);
     }
 
     // how far the house's mid currently sits from the feed price, in basis points
@@ -277,6 +316,9 @@ public class MatchingEngine {
             }
         }
         matcher.volume += result.houseVolume();
+        if (result.lastPrice() != null) {
+            matcher.lastPrice = result.lastPrice();
+        }
         refresh(matcher);
         return result.order();
     }
@@ -287,9 +329,10 @@ public class MatchingEngine {
         HouseMarket house = house(matcher.symbol);
         double bookBps = feed == null ? 0 : bookLean(matcher, feed);
         double flowBps = impact.pressureBps(matcher.volume);
-        matcher.snapshot = new Snapshot(new BookView(matcher.symbol, house == null ? null : house.touch(),
+        matcher.snapshot = new Snapshot(new BookView(matcher.symbol, mode, house == null ? null : house.touch(),
                 matcher.book.depth(OrderSide.BUY, SNAPSHOT_LEVELS), matcher.book.depth(OrderSide.SELL, SNAPSHOT_LEVELS),
-                feed == null ? null : feed.price(), round(flowBps), round(bookBps)), house, flowBps + bookBps);
+                feed == null ? null : feed.price(), round(flowBps), round(bookBps), matcher.lastPrice), house,
+                flowBps + bookBps);
     }
 
     private Snapshot snapshot(String symbol) {
@@ -302,8 +345,12 @@ public class MatchingEngine {
     }
 
     // The house as it stands: the feed price, leaned by the resting orders near it and by
-    // the net volume users have traded with it. Nothing while the quote is stale.
+    // the net volume users have traded with it. Nothing while the quote is stale, and
+    // never in book mode, which leaves every house path (sweeps, house fills) idle.
     private HouseMarket house(String symbol) {
+        if (mode == MarketMode.BOOK) {
+            return null;
+        }
         Quote quote = quotes.get(symbol).orElse(null);
         if (quote == null || !quotes.isTradable(quote)) {
             return null;
@@ -313,6 +360,9 @@ public class MatchingEngine {
     }
 
     private double bookLean(Matcher matcher, Quote feed) {
+        if (mode == MarketMode.BOOK) {
+            return 0;
+        }
         return impact.imbalanceSkew(
                 matcher.book.sharesNear(OrderSide.BUY, feed.price(), PriceImpact.IMBALANCE_WINDOW_BPS),
                 matcher.book.sharesNear(OrderSide.SELL, feed.price(), PriceImpact.IMBALANCE_WINDOW_BPS));

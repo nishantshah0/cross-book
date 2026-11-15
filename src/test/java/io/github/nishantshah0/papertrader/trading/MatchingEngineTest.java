@@ -33,6 +33,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class MatchingEngineTest {
 
     private final OrderRepository repository = mock(OrderRepository.class);
+    private final TradeRepository trades = mock(TradeRepository.class);
     private final OrderExecution execution = mock(OrderExecution.class);
     private final QuoteCache quotes = mock(QuoteCache.class);
     private final Order bid90 = limit(11L, 1L, "90");
@@ -149,7 +150,7 @@ class MatchingEngineTest {
         long start = System.nanoTime();
         var book = engine.book("AAPL", 5);
         engine.leanBps("AAPL");
-        engine.housePrice("AAPL", OrderSide.BUY, 10);
+        engine.estimatePrice("AAPL", OrderSide.BUY, 10);
         long millis = (System.nanoTime() - start) / 1_000_000;
 
         assertThat(millis).isLessThan(200);
@@ -199,8 +200,8 @@ class MatchingEngineTest {
     }
 
     private MatchingEngine engine(long timeoutMs) {
-        MatchingEngine built = new MatchingEngine(repository, execution, quotes, PriceImpact.none(), 0,
-                Clock.systemUTC(), timeoutMs);
+        MatchingEngine built = new MatchingEngine(repository, trades, execution, quotes, PriceImpact.none(), 0,
+                "house", Clock.systemUTC(), timeoutMs);
         built.rebuild();
         built.restingOrders("AAPL"); // wait for the rebuild before anything stubs a mock
         return built;

@@ -153,7 +153,7 @@ export default function App() {
       return;
     }
     let current = true;
-    api("/book/" + symbol + "/house-price?side=" + side + "&shares=" + shares)
+    api("/book/" + symbol + "/estimate?side=" + side + "&shares=" + shares)
       .then((r) => current && setSizePrice(r.price))
       .catch(() => current && setSizePrice(null));
     return () => {
@@ -823,7 +823,15 @@ export default function App() {
                         (
                           Number(book.house.ask) - Number(book.house.bid)
                         ).toFixed(2)
-                      : "No house quote"}
+                      : book?.market === "BOOK"
+                        ? book.asks.length && book.bids.length
+                          ? "Spread " +
+                            (
+                              Number(book.asks[0].price) -
+                              Number(book.bids[0].price)
+                            ).toFixed(2)
+                          : "One side of the book is empty"
+                        : "No house quote"}
                   </div>
                 )}
                 {ladder[key].map((level) => (
@@ -864,7 +872,13 @@ export default function App() {
                   " from recent trading, " +
                   bps(book.bookBps) +
                   " from resting orders. Bigger orders cost more per share. Click a price to use it as your limit."
-                : "The quote is stale, so the house is out. Traders can still trade with each other."}
+                : book?.market === "BOOK"
+                  ? "No house in this market: prices come only from traders' orders" +
+                    (book.lastPrice
+                      ? ", and the last trade was " + money(book.lastPrice)
+                      : "") +
+                    ". Click a price to use it as your limit."
+                  : "The quote is stale, so the house is out. Traders can still trade with each other."}
             </p>
           </section>
           <section className="order-panel panel">
@@ -978,9 +992,13 @@ export default function App() {
                   : (side === "BUY" ? "Buy " : "Sell ") + symbol}
               </button>
               <p className="order-note">
-                {type === "LIMIT"
-                  ? "Fills against other traders first, then the house. Anything left rests in the book at your limit."
-                  : "Fills at the best prices available: other traders first, then the house."}
+                {book?.market === "BOOK"
+                  ? type === "LIMIT"
+                    ? "Fills against other traders' orders at your price or better. Anything left rests in the book at your limit."
+                    : "Takes the best orders in the book; whatever the book can't fill is cancelled."
+                  : type === "LIMIT"
+                    ? "Fills against other traders first, then the house. Anything left rests in the book at your limit."
+                    : "Fills at the best prices available: other traders first, then the house."}
               </p>
             </form>
           </section>

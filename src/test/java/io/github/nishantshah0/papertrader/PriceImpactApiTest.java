@@ -68,11 +68,11 @@ class PriceImpactApiTest extends ApiTestSupport {
         assertThat(house.ask()).isEqualByComparingTo("100.2501");
 
         // the terminal asks the same question before you order
-        var quote = get("/api/book/IMA/house-price?side=BUY&shares=1");
+        var quote = get("/api/book/IMA/estimate?side=BUY&shares=1");
         assertThat(quote).hasStatus(HttpStatus.OK);
         assertThat(quote).bodyJson().extractingPath("$.price").asNumber().satisfies(
                 price -> assertThat(price.doubleValue()).isCloseTo(100.2506, within(0.0001)));
-        assertThat(get("/api/book/IMA/house-price?side=BUY&shares=0"))
+        assertThat(get("/api/book/IMA/estimate?side=BUY&shares=0"))
                 .hasStatus(HttpStatus.BAD_REQUEST);
 
         Order next = service.place(second.id(), market(OrderSide.BUY, "IMA", 1));

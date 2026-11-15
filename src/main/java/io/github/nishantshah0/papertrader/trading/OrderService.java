@@ -37,8 +37,8 @@ public class OrderService {
         return place(accountId, request, null);
     }
 
+    // an unknown account is refused when the matcher goes to lock it, so no check here
     public Order place(Long accountId, PlaceOrderRequest request, String key) {
-        requireAccount(accountId);
         String symbol = request.symbol().toUpperCase(Locale.ROOT);
         if (quotes.get(symbol).isEmpty()) {
             throw new OrderRejectedException("unknown symbol " + symbol); // before it gets a matcher thread

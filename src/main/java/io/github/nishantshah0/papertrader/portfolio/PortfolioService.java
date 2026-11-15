@@ -3,8 +3,7 @@ package io.github.nishantshah0.papertrader.portfolio;
 import io.github.nishantshah0.papertrader.account.Account;
 import io.github.nishantshah0.papertrader.account.AccountService;
 import io.github.nishantshah0.papertrader.portfolio.PortfolioResponse.PositionView;
-import io.github.nishantshah0.papertrader.quote.Quote;
-import io.github.nishantshah0.papertrader.quote.QuoteCache;
+import io.github.nishantshah0.papertrader.trading.Marks;
 import io.github.nishantshah0.papertrader.trading.OrderRepository;
 import io.github.nishantshah0.papertrader.trading.OrderStatus;
 import io.github.nishantshah0.papertrader.trading.Position;
@@ -26,14 +25,14 @@ public class PortfolioService {
     private final AccountService accounts;
     private final PositionRepository positions;
     private final OrderRepository orders;
-    private final QuoteCache quotes;
+    private final Marks marks;
 
     PortfolioService(AccountService accounts, PositionRepository positions, OrderRepository orders,
-            QuoteCache quotes) {
+            Marks marks) {
         this.accounts = accounts;
         this.positions = positions;
         this.orders = orders;
-        this.quotes = quotes;
+        this.marks = marks;
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -51,7 +50,7 @@ public class PortfolioService {
                 continue;
             }
             // a symbol dropped from config still needs a mark; fall back to cost
-            BigDecimal last = quotes.get(position.getSymbol()).map(Quote::price).orElse(position.getAvgCost());
+            BigDecimal last = marks.mark(position.getSymbol()).orElse(position.getAvgCost());
             BigDecimal value = position.marketValue(last);
             BigDecimal pnl = position.unrealizedPnl(last);
             marketValue = marketValue.add(value);

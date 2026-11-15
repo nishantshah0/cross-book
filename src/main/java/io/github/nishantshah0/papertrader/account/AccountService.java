@@ -34,6 +34,6 @@ public class AccountService {
 
     @Transactional(readOnly = true)
     public Account get(Long id) {
-        return accounts.findById(id).orElseThrow(() -> new NotFoundException("account " + id + " not found"));
+        return accounts.findWithUserById(id).orElseThrow(() -> new NotFoundException("account " + id + " not found"));
     }
 }

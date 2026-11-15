@@ -37,6 +37,18 @@ An incoming order walks the opposite side of the book best price first, oldest f
 
 Every quote also moves the house, and so does every placement and cancel, because those change the house's lean. Resting bids at or above the new house ask, and asks at or below the new house bid, fill in full at the house's touch price: they were resting, so the house came to them and they pay nothing for size.
 
+### Book mode: no house
+
+`papertrader.market.mode=book` (`MARKET_MODE=book`) takes the house out. A bot market needs this. With a house anchored to the feed, trading can only push the price 5% before it fades back, so a pump cannot pump, and a manipulator's profit comes mostly from the house rather than from other traders. In book mode:
+
+- **Orders only trade with each other.** A market order takes what the opposite side of the book holds, best first, and the rest is cancelled; one that would find nothing at all is refused. Its buying-power check covers exactly the orders it was matched with. Limit orders rest until another trader crosses them; nothing sweeps them on a tick.
+- **The feed is a reference value, not a price.** Quotes keep arriving, so traders can watch a "true value", but no fill is priced from them.
+- **Positions are worth the last trade.** `Marks` is the one place a position gets its price, for portfolios, the leaderboard and the ledger: the feed in house mode, the last trade between two users in book mode (the feed until the first one). The matcher keeps the last price in memory and reloads it from the newest trade at startup.
+- **Shares come from allocations.** A book market has no other source of shares, so under a simulated clock `POST /api/simulation/allocations` sells an account shares from the house at the feed price before a run starts. It goes through the house's books like any house fill, so every ledger check still holds; it is not a market trade, so it sets no last price. In book mode a fill with no counterparty order is always an allocation, which is how a detector tells them apart.
+- **`GET /api/book/{symbol}/estimate`** prices a market order from the book's resting orders instead of the house's curve.
+
+House mode stays the default, for one person practising against a market that always answers.
+
 ## Price impact
 
 `PriceImpact` holds the model and `HouseMarket` prices fills from it; the matcher keeps the state. All of it is in basis points.
@@ -87,9 +99,9 @@ A trade between two users changes two accounts in one transaction: both cash bal
 
 Accounts also carry a `@Version` column. With the row locks in place it never conflicts; it exists so that any future write path that forgets the lock fails with an optimistic-lock error instead of silently overwriting a balance.
 
-Portfolio and leaderboard reads use repeatable-read transactions to avoid mixing balances and positions from different commits. The leaderboard is one SQL query: prices live in memory, so the latest quotes are passed in as arrays and joined to positions, and each position rounds to cents before summing so the numbers match the portfolio page. With 1,339 accounts it takes about 11 ms, down from about 500 ms when it valued each portfolio separately. The database refuses to overfill an order: `filled_quantity` is checked against `quantity`, and a FILLED order must be fully filled.
+Portfolio and leaderboard reads use repeatable-read transactions to avoid mixing balances and positions from different commits. The leaderboard is one SQL query: prices live in memory, so the marks are passed in as arrays and joined to positions, and each position rounds to cents before summing so the numbers match the portfolio page. With 1,339 accounts it takes about 11 ms, down from about 500 ms when it valued each portfolio separately. The database refuses to overfill an order: `filled_quantity` is checked against `quantity`, and a FILLED order must be fully filled.
 
-Open limit orders reserve buying power and inventory for the shares they still have to fill. The holds are not stored: placement reads the account's OPEN orders under its lock and subtracts their remaining buy notionals (at the limit price) from cash and their remaining sell quantities from shares. A buy reserves at its limit and fills at or below it, so its hold always covers the fill. A market buy is checked against the house ask, the worst price it can fill at. Each fill still re-checks the balance under the lock; a resting order that cannot pay (only possible for orders placed before reservations existed) is rejected and skipped.
+Open limit orders reserve buying power and inventory for the shares they still have to fill. The holds are not stored: placement reads the account's OPEN orders under its lock and subtracts their remaining buy notionals (at the limit price) from cash and their remaining sell quantities from shares. A buy reserves at its limit and fills at or below it, so its hold always covers the fill. A market buy is checked against the house's price for its whole size, the worst it can fill at; in book mode, against the resting orders it was matched with. Each fill still re-checks the balance under the lock; a resting order that cannot pay (only possible for orders placed before reservations existed) is rejected and skipped.
 
 Notional values round half up to cents per fill; prices and average costs use four decimals. Fills are whole-share and long-only.
 
@@ -154,7 +166,7 @@ There is deliberately no identity/authentication layer. Account IDs select share
 
 Everything that records time reads one injected `java.time.Clock`: orders, trades, positions, the house's books, accounts, events, quotes and the ledger report. Each transaction reads it once and passes that instant down, so every row one order writes carries the same timestamp, and an event's time is taken from the row it describes. There is no static clock to leak between contexts.
 
-`papertrader.clock.mode=system` is the wall clock. `simulated` starts at `papertrader.clock.start` and moves only when `Simulation.tick` advances it, one feed interval at a time. A tick then:
+`papertrader.clock.mode=system` is the wall clock. `simulated` starts at `papertrader.clock.start` and moves only when the simulation moves it. Ticks sit on a fixed grid, `start + n × interval`. A tick moves the clock to the next point on the grid, then:
 
 1. asks the feed for every symbol's next price, in symbol order, from the seeded walk;
 2. asks each symbol's matcher, one after another and waiting for each, to fade its lean and fill the resting orders the new quote crosses;
@@ -163,6 +175,8 @@ Everything that records time reads one injected `java.time.Clock`: orders, trade
 On the wall clock the feed runs on a schedule and each matcher reacts to quote events on its own thread, so symbols tick in parallel. Under a simulated clock the scheduled refresh does nothing and the engine ignores quote events, because the simulation drives both in a fixed order. Orders placed between ticks already finish on their matcher before the call returns, including the sweep that follows them.
 
 That is what makes a run replayable: from `Simulation.reset(seed)`, which truncates every trading table, restarts identity sequences, clears the books and leans, and puts prices back to their seeds at the start time, the same sequence of calls writes the same rows with the same ids, prices and timestamps. `SimulationReplayTest` runs a scripted session twice and compares the event log, quote history, ledger report and portfolios as JSON; breaking the feed's seeding makes it fail. Reset is a Java call for a simulation runner, not an endpoint. The guarantee assumes one caller at a time: concurrent clients would still race each other, as they would on any exchange.
+
+Between ticks, `Simulation.advance` (`POST /api/simulation/advance?millis=`) moves the clock forward by less than a tick, so things that happen within one interval get their own times: an order placed and cancelled 250 ms later shows exactly 250 ms between its events. Time-to-cancel is the main signal of spoofing, and without this every event in a tick would share a timestamp. Advancing may not reach the next grid point; that is the tick's job, and the next tick still lands on the grid however far the clock went.
 
 A simulated clock refuses live quotes, which have their own timestamps.
 

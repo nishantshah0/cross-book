@@ -3,8 +3,7 @@ package io.github.nishantshah0.papertrader.ledger;
 import io.github.nishantshah0.papertrader.ledger.LedgerReport.HouseBooks;
 import io.github.nishantshah0.papertrader.ledger.LedgerReport.Totals;
 import io.github.nishantshah0.papertrader.ledger.LedgerReport.Violation;
-import io.github.nishantshah0.papertrader.quote.Quote;
-import io.github.nishantshah0.papertrader.quote.QuoteCache;
+import io.github.nishantshah0.papertrader.trading.Marks;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
@@ -34,12 +33,12 @@ public class LedgerAudit {
     private static final String NOTIONAL = "round(price * quantity, 2)";
 
     private final JdbcTemplate jdbc;
-    private final QuoteCache quotes;
+    private final Marks marks;
     private final Clock clock;
 
-    LedgerAudit(JdbcTemplate jdbc, QuoteCache quotes, Clock clock) {
+    LedgerAudit(JdbcTemplate jdbc, Marks marks, Clock clock) {
         this.jdbc = jdbc;
-        this.quotes = quotes;
+        this.marks = marks;
         this.clock = clock;
     }
 
@@ -206,14 +205,14 @@ public class LedgerAudit {
                         row.getBigDecimal("house_cash")));
     }
 
-    // the house's position in each symbol, marked at the last quote: its cash plus what
+    // the house's position in each symbol, at its mark (see Marks): its cash plus what
     // its shares are worth is what it has made from the spread so far
     private List<HouseBooks> house() {
         return jdbc.query("select symbol, quantity, cash from house_positions order by symbol", (row, n) -> {
             String symbol = row.getString("symbol");
             long quantity = row.getLong("quantity");
             BigDecimal cash = row.getBigDecimal("cash");
-            BigDecimal mark = quotes.get(symbol).map(Quote::price).orElse(null);
+            BigDecimal mark = marks.mark(symbol).orElse(null);
             BigDecimal profit = mark == null ? null
                     : cash.add(mark.multiply(BigDecimal.valueOf(quantity))).setScale(2, RoundingMode.HALF_UP);
             return new HouseBooks(symbol, quantity, cash, mark, profit);

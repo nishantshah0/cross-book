@@ -72,10 +72,60 @@ Throughput did not fall as the database grew: a warm run at 287,000 trades match
 first baseline. An earlier dip to about 1,600 orders a second was a cold app straight
 after a restart.
 
+## One action at a time, for bot runs
+
+A bot run that has to replay exactly from its seed can't fire orders in parallel: each
+bot acts in turn and waits for its result. So the number that matters for bots is how
+fast one caller goes, in-process, not how much concurrent HTTP the server takes.
+`BotSpeedTest` measures that: 60 bots (market makers quoting and cancelling, takers
+crossing the spread) take 4,000 actions in book mode on a simulated clock. It also counts
+the SQL statements each action sends, from Hibernate's statistics, and fails if that
+count creeps back above 8.5.
+
+Logging every statement in that run showed where the round trips went:
+
+| Statement | Per 4,000 actions | Fix |
+| --------- | ----------------: | --- |
+| Load the account's user row whenever the account was locked | 6,002 | The account's user is now lazy; only responses that show the username load it. |
+| `select count(*)` to check the account exists before placing | 5,788 | Dropped: the order's transaction locks the account and answers 404 itself. |
+| Read the same position again for each check and fill | about 3,600 | Each transaction reads a position once and reuses it. |
+| Lock each account, and load each maker order, one query at a time | a few hundred | One locking query for all of an order's accounts (still taken in ID order) and one for all its makers. |
+| Updates to accounts, orders and positions sent one by one | (batched) | JDBC batching sends each kind in one round trip at commit. |
+
+| | Before | After |
+| --- | ---: | ---: |
+| SQL statements per action | 11.4 | 7.7 |
+| Transactions per action | 2.2 | 1.3 |
+| Actions per second, one at a time | 547 | 677 |
+
+That is 24% faster. Turning off `synchronous_commit` on top added only 3% (696 a
+second), so disk flushes are not the limit; round trips to Postgres in Docker are. What
+is left is mostly inserts (the order, its events and trades), which cannot be batched
+because their keys come from identity columns. Switching them to pooled sequences would
+batch them, but the pool lives in the app's memory, so a simulation reset that restarts
+the sequences would hand out different ids on a replay. That is not worth breaking
+exact replays for.
+
+At this speed a run of 150,000 bot actions takes about four minutes. Independent runs,
+one per seed, can go in parallel on separate databases, which is how scoring across many
+seeds should scale.
+
+The same changes against the concurrent HTTP load test, on the same laptop with a much
+bigger database (407,000 trades against 135,000):
+
+| Traders | Requests/s | Orders placed/s | p99 ms |
+| ------: | ---------: | --------------: | -----: |
+| 1 | 635 → 666 | 433 → 432 | 4.3 → 3.2 |
+| 10 | 2,502 → 2,703 | 1,802 → 1,741 | 11.5 → 10.9 |
+| 50 | 2,699 → 3,341 | 2,005 → 2,198 | 102.7 → 57.4 |
+
+Latency under load roughly halved, and requests a second rose 24% at 50 traders, but
+orders placed a second barely moved from the warm baseline of 2,190. Request threads no
+longer borrow a connection to check the account, which helps the queue, while the work
+inside each order's transaction is what still caps throughput.
+
 ## What to try in the stress test
 
 1. Fewer round trips per order: keep each account's reservations in the matcher instead
-   of re-reading open orders, and batch the writes.
-2. Keep request threads off the matcher's connections: check accounts from a cache or a
-   separate pool.
-3. Then raise the load until the next limit shows, and remeasure with the same command.
+   of re-reading open orders.
+2. Then raise the load until the next limit shows, and remeasure with the same command.

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 // top of the book for one symbol: users' resting orders by price level, and the house
+// when there is one
 @RestController
 @RequestMapping("/api/book")
 class BookController {
@@ -26,16 +27,18 @@ class BookController {
         this.quotes = quotes;
     }
 
-    // what the house charges per share for an order of this size, after the size cost
-    record HousePrice(String symbol, OrderSide side, int shares, BigDecimal price) {
+    // What a market order of this size would pay per share now: the house's price after
+    // its size cost, or in book mode the average over the resting orders it would take.
+    // price is null when it cannot be priced (a stale quote, or too thin a book).
+    record Estimate(String symbol, MarketMode market, OrderSide side, int shares, BigDecimal price) {
     }
 
-    @GetMapping("/{symbol}/house-price")
-    HousePrice housePrice(@PathVariable String symbol, @RequestParam OrderSide side,
+    @GetMapping("/{symbol}/estimate")
+    Estimate estimate(@PathVariable String symbol, @RequestParam OrderSide side,
             @RequestParam @Min(1) @Max(1_000_000) int shares) {
         String key = symbol.toUpperCase(Locale.ROOT);
         quotes.require(key);
-        return new HousePrice(key, side, shares, engine.housePrice(key, side, shares));
+        return new Estimate(key, engine.mode(), side, shares, engine.estimatePrice(key, side, shares));
     }
 
     @GetMapping("/{symbol}")

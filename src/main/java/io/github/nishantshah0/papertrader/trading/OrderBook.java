@@ -1,6 +1,7 @@
 package io.github.nishantshah0.papertrader.trading;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -152,6 +153,25 @@ public class OrderBook {
                         level.getValue().values().stream().mapToInt(RestingOrder::remaining).sum(),
                         level.getValue().size()))
                 .toList();
+    }
+
+    // The average price per share of taking this many shares from these levels, best
+    // first, or null if they do not hold that many.
+    public static BigDecimal averagePrice(List<Level> levels, int shares) {
+        if (shares <= 0) {
+            return null;
+        }
+        BigDecimal cost = BigDecimal.ZERO;
+        int left = shares;
+        for (Level level : levels) {
+            int take = Math.min(left, level.quantity());
+            cost = cost.add(level.price().multiply(BigDecimal.valueOf(take)));
+            left -= take;
+            if (left == 0) {
+                return cost.divide(BigDecimal.valueOf(shares), 4, RoundingMode.HALF_UP);
+            }
+        }
+        return null;
     }
 
     public void clear() {

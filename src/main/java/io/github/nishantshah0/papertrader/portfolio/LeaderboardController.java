@@ -1,9 +1,9 @@
 package io.github.nishantshah0.papertrader.portfolio;
 
-import io.github.nishantshah0.papertrader.quote.Quote;
-import io.github.nishantshah0.papertrader.quote.QuoteCache;
+import io.github.nishantshah0.papertrader.trading.Marks;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,8 +11,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 // One query ranks every account, so the cost no longer grows with a round trip per
-// account. Prices live in memory, so the latest quotes go in as two arrays; a position
-// in a symbol with no quote is marked at its average cost, as the portfolio page does.
+// account. Prices live in memory, so the marks (see Marks) go in as two arrays; a
+// position in a symbol with no mark is valued at its average cost, as the portfolio page does.
 @RestController
 class LeaderboardController {
 
@@ -40,11 +40,11 @@ class LeaderboardController {
             """;
 
     private final JdbcTemplate jdbc;
-    private final QuoteCache quotes;
+    private final Marks marks;
 
-    LeaderboardController(JdbcTemplate jdbc, QuoteCache quotes) {
+    LeaderboardController(JdbcTemplate jdbc, Marks marks) {
         this.jdbc = jdbc;
-        this.quotes = quotes;
+        this.marks = marks;
     }
 
     public record Entry(Long accountId, String username, BigDecimal totalValue, BigDecimal returnPercent) {}
@@ -52,9 +52,9 @@ class LeaderboardController {
     @GetMapping("/api/leaderboard")
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public List<Entry> leaderboard() {
-        List<Quote> marks = quotes.all();
-        String[] symbols = marks.stream().map(Quote::symbol).toArray(String[]::new);
-        BigDecimal[] prices = marks.stream().map(Quote::price).toArray(BigDecimal[]::new);
+        Map<String, BigDecimal> latest = marks.all();
+        String[] symbols = latest.keySet().toArray(String[]::new);
+        BigDecimal[] prices = latest.values().toArray(BigDecimal[]::new);
         return jdbc.query(SQL, statement -> {
             statement.setArray(1, statement.getConnection().createArrayOf("varchar", symbols));
             statement.setArray(2, statement.getConnection().createArrayOf("numeric", prices));
