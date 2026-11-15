@@ -26,6 +26,7 @@ Trade against other users and a simulated market maker, watch partial fills land
 - **A simulated market maker.** The house quotes a bid and an ask around the feed price, so a market order always has something to trade with, even if you're the only user.
 - **One matcher thread per symbol.** Symbols match in parallel and nothing within a symbol interleaves. Postgres stays the source of truth.
 - **Books that always balance.** The house keeps its own books, so every dollar and share a user gains, the house gives up. A ledger audit proves nothing was created or destroyed, and it runs after every integration test.
+- **A replayable bot market.** One command runs 100+ simulated traders for an hour of market time in about a minute. The same seed gives the same market down to the millisecond, and only a separate answer key says which account is which bot.
 - **A complete audit trail.** Every order event (placed, partly filled, filled, cancelled, rejected) is logged with a sequence number in the same transaction as the change, so the log never disagrees with the books.
 - **Safe under concurrency.** Accounts are locked in ID order so trades can't deadlock, the book changes only after the transaction commits, and retries with an `Idempotency-Key` never place the same order twice.
 - **A full trading terminal.** Everything on one screen: a searchable watchlist, a chart with a crosshair and time ranges, an order book ladder you can click to set a limit price, the order ticket, positions and order history, and a leaderboard.
@@ -128,7 +129,22 @@ It resets the exchange, runs 100 noise traders and 8 market makers across all tw
 - **Noise traders** buy and sell at random, in random sizes. Some orders take what the book offers and some are limit orders a little off the middle, and they give up on old ones. They only see the book and the last trade.
 - **Market makers** each quote a few stocks around the feed price, which only they see. They pull and re-post their quotes, shifted against their inventory. They're what keeps trading anchored to the feed.
 
-In a measured run (seed 1, defaults), 108 bots took 45,423 actions in 64 seconds: 10,324 trades between bots, 15 refused orders and a balanced ledger. Every stock's last trade ended within 31 bps of its feed price. The bots call the order service directly rather than going over HTTP, so their orders are checked, matched, logged and audited like anyone's.
+A measured run with the defaults (seed 1, on an Apple M3 laptop, fresh database):
+
+| | |
+| --- | --- |
+| Bots | 108 (100 noise traders, 8 market makers) on 12 stocks |
+| Market time | 1 hour (240 ticks of 15 seconds) |
+| Wall time | 64 seconds, about 710 actions a second |
+| Actions | 45,423: 22,741 orders placed, 12,073 cancels |
+| Trades between bots | 10,324 |
+| Refused orders | 15 |
+| Last trade vs feed price | within 31 bps for every stock |
+| Ledger | balanced |
+
+The bots call the order service directly rather than going over HTTP, so their orders are checked, matched, logged and audited like anyone's.
+
+**A bug worth knowing about.** In the first version, a noise trader that wanted to sell a stock it didn't hold bought it instead. That one line tilted the whole market towards buying, and every stock drifted up, by as much as 4.7% above its feed price in an hour. Now it does nothing that turn, and prices stay within 31 bps. A detector has to be graded against a market whose honest traders really are neutral, so this is checked on every full run.
 
 What makes a run usable for grading a detector:
 
@@ -136,6 +152,8 @@ What makes a run usable for grading a detector:
 - **Bots don't share random numbers.** Each bot has its own random streams, seeded from the run's seed and the bot's name: one for when it wakes and one for what it does. Rerunning a market without one bot leaves every other bot's schedule exactly as it was, so the difference is that bot's effect.
 - **Bots act through each tick.** Each bot wakes at random intervals (exponential gaps), and the clock moves to each wake, so the event log has realistic timing between orders and cancels.
 - **Only the answer key says who is who.** Accounts are named `trader_0001` and up, opened in an order shuffled by the seed, so neither the name nor the id gives a bot away. The `answer_key` table records each account's bot and kind for grading; a detector reads only the market data.
+
+What's still simplified: market makers see the feed price, as a stand-in for the private information real makers trade on. Noise traders are purely random, with no momentum or herding. Nobody can short. Bots act one at a time, which is what makes a run exact and caps it at about 700 actions a second.
 
 **Reservations.** Open limit orders reserve what they still need: a buy holds its limit price times its remaining shares, and a sell holds its remaining shares. New orders can only use buying power and shares that aren't already reserved, so a resting order stays funded until it fills or is cancelled. Cancelling a partly filled order keeps what already filled.
 
