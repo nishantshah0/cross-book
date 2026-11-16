@@ -22,11 +22,12 @@ import tools.jackson.databind.node.ObjectNode;
 @Service
 public class RedTeamRuns {
 
-    // the cheater names runs by the time they started, plus -dry for scripted ones
-    private static final Pattern NAME = Pattern.compile("\\d{8}-\\d{6}(-dry)?");
+    // the cheater names runs by the time they started, plus tags like -dry, -random, -blind
+    private static final Pattern NAME = Pattern.compile("\\d{8}-\\d{6}(-[a-z0-9]+)*");
 
-    public record Summary(String name, String phase, String model, String via, int trials, int budget,
-            Integer flaggedHeldOut, Integer spoofersHeldOut, Double lift, Double builtInLift, long updatedAt) {
+    public record Summary(String name, String phase, String model, String via, String searcher, boolean blind,
+            String detector, int trials, int budget, Integer firstSuccess, Integer flaggedHeldOut,
+            Integer spoofersHeldOut, Double lift, Double builtInLift, long updatedAt) {
     }
 
     private final Path dir;
@@ -112,7 +113,10 @@ public class RedTeamRuns {
         return new Summary(name, run.path("status").path("phase").asString("done"),
                 run.path("model").isNull() ? null : run.path("model").asString(null),
                 run.path("via").isNull() ? null : run.path("via").asString(null),
+                run.path("searcher").asString(run.path("model").isNull() ? "scripted" : "claude"),
+                run.path("blind").asBoolean(false), run.path("detector").asString("spoofing-rules"),
                 Math.max(0, run.path("trials").size() - 1), run.path("budget").asInt(0),
+                run.path("firstSuccess").isIntegralNumber() ? run.path("firstSuccess").asInt() : null,
                 graded ? cheater.path("flaggedSpoofers").asInt() : null,
                 graded ? 2 * run.path("heldOutSeeds").size() : null,
                 graded && cheater.hasNonNull("lift") ? cheater.path("lift").asDouble() : null,

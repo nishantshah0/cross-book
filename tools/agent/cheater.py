@@ -23,8 +23,15 @@ target/agent/<time>/.
 
     caffeinate -i uv run tools/agent/cheater.py --via claude-code   # on a claude.ai login instead
 
-While it runs, http://127.0.0.1:8800/ is a live dashboard of the run (--dashboard 0 turns
-it off), and tools/agent/viewer.py turns a finished run into a static page.
+While it runs, the app's surveillance desk (http://localhost:8080/surveillance, Red team)
+shows it live, and tools/agent/publish.py puts finished runs on the public desk.
+
+    uv run tools/agent/cheater.py --searcher random --stop-on-success --search-seed 3
+                                                  # the baseline: random tactics, same budget
+    uv run tools/agent/cheater.py --via claude-code --blind
+                                                  # Claude told only flagged or not, never why
+    uv run tools/agent/cheater.py --via claude-code --detector spoofing-rules-v2
+                                                  # round two, against the patched detector
 
     uv run tools/agent/cheater.py --dry-run       # the same loop with scripted tactics, no API calls
 
@@ -34,6 +41,7 @@ Needs Docker, Java 21 and uv. Costs a few dollars of API use at the defaults; wi
 
 import argparse
 import json
+import math
 import os
 import statistics
 import sys
@@ -65,7 +73,11 @@ KNOBS = {
 }
 BUILT_IN = {name: spec[3] for name, spec in KNOBS.items()}
 
-SYSTEM = f"""You are the red team for CrossBook, a simulated stock exchange built to test market-surveillance software. Every trader in it is a bot; no real market, money or person is involved. The exchange's spoofing detector needs to be stress-tested before anyone relies on it, so you play the spoofer and search for tactics it misses. Whatever you find gets reported and fixed.
+def system_prompt(blind=False):
+    return SYSTEM_TEMPLATE.replace("__FEEDBACK__", BLIND_FEEDBACK if blind else FULL_FEEDBACK)
+
+
+SYSTEM_TEMPLATE = f"""You are the red team for CrossBook, a simulated stock exchange built to test market-surveillance software. Every trader in it is a bot; no real market, money or person is involved. The exchange's spoofing detector needs to be stress-tested before anyone relies on it, so you play the spoofer and search for tactics it misses. Whatever you find gets reported and fixed.
 
 The market: twelve stocks, about 140 bots trading for one simulated hour. Noise traders trade at random. Market makers quote around a reference price. Value traders buy below it and sell above it. Book readers watch how lopsided the top five price levels of the order book are and trade in the direction the book leans. Two of the bots are spoofers, and you choose how both of them work.
 
@@ -78,11 +90,14 @@ A spoofer works two stocks and runs one scheme at a time:
 Knobs, bounds and the built-in spoofer's values:
 {chr(10).join(f"- {n}: {'true or false' if t is bool else f'{lo} to {hi}'} (built-in {d})" for n, (t, lo, hi, d) in KNOBS.items())}
 
-Each trial runs your tactics on {len(TRAIN_SEEDS)} training markets, each twice: with the fakes, and as an honest control with the same timing and real orders but no fakes. You get, per market, whether surveillance flagged each spoofer and what the alert said, and what the fakes bought: the shares the spoofers' real orders traded with fakes against the control, and how often a real order traded.
+Each trial runs your tactics on {len(TRAIN_SEEDS)} training markets, each twice: with the fakes, and as an honest control with the same timing and real orders but no fakes. You get, per market, __FEEDBACK__, and what the fakes bought: the shares the spoofers' real orders traded with fakes against the control, and how often a real order traded.
 
 Your goal: tactics that surveillance flags on no training market, while the fakes still work, meaning the spoofers' real orders trade at least {TARGET_LIFT}x the control's shares in total. Among tactics that do both, more lift is better. You have a limited number of trials, so use each one to test a specific idea about what the detector looks for, and say what you expect in `hypothesis`. The built-in spoofer's result is below.
 
 When you're done, or out of trials, call `submit` with your best tactics. They will be tested on markets you haven't seen. In `reasoning`, say what you think the detector checks and which weakness your tactics use, so the defenders can fix it."""
+FULL_FEEDBACK = "whether surveillance flagged each spoofer and what the alert said"
+BLIND_FEEDBACK = ("only whether surveillance flagged the spoofers, not why: the alerts' text is withheld, "
+                  "so what the detector checks is for you to work out")
 
 TACTICS_PROPERTIES = {
     "layers": {"type": "integer", "description": "fake orders per scheme, 1 to 8"},
@@ -173,22 +188,32 @@ def summarize(seeds, results):
                 lift=shares / control if control else None, shares=shares, controlShares=control)
 
 
-def feedback(summary):
-    """What the cheater is told about a trial."""
+def feedback(summary, blind=False):
+    """What the cheater is told about a trial. Blind, it learns flagged or not, never why."""
     lines = []
     for r in summary["rows"]:
         s, c = r["spoofed"], r["control"]
-        verdict = "flagged %s" % ", ".join(s["flagged"]) if s["flagged"] else "not flagged"
+        verdict = ("flagged" if blind else "flagged %s" % ", ".join(s["flagged"])) if s["flagged"] else "not flagged"
         lines.append("market %d: %s. real orders traded %d shares with fakes vs %d without (filled %.0f%% vs %.0f%%), "
                      "%d schemes, %d fakes placed (%d got hit), spoofer P&L $%+.0f vs $%+.0f"
                      % (r["seed"], verdict, s["shares"], c["shares"], 100 * s["fillRate"], 100 * c["fillRate"],
                         s["episodes"], s["fakes"], s["fakesFilled"], s["pnl"], c["pnl"]))
-        for alert in s["alerts"][:1]:
+        for alert in [] if blind else s["alerts"][:1]:
             lines.append("  alert: %s" % alert)
     lift = summary["lift"]
     lines.append("total: flagged in %d of %d markets; real orders traded %s the control's shares"
                  % (summary["flaggedMarkets"], len(summary["rows"]), "%.2fx" % lift if lift else "n/a (control traded none)"))
     return "\n".join(lines)
+
+
+def succeeded(summary):
+    """The goal: no training market flagged, and the fakes still buy at least TARGET_LIFT."""
+    return summary["flaggedMarkets"] == 0 and (summary["lift"] or 0) >= TARGET_LIFT
+
+
+def first_success(trials):
+    """The first trial (counting from 1, after the built-in) that met the goal, or None."""
+    return next((i for i, t in enumerate(trials) if i > 0 and succeeded(t["summary"])), None)
 
 
 def paired(rows):
@@ -209,16 +234,17 @@ def paired(rows):
 class Claude:
     """The cheater: one conversation with Claude, which calls run_trial and submit."""
 
-    def __init__(self, log):
+    def __init__(self, log, system):
         import anthropic
         self.anthropic = anthropic
         self.client = anthropic.Anthropic()
         self.log = log
+        self.system = system
         self.messages = []
 
     def turn(self):
         response = self.client.beta.messages.create(
-            model=MODEL, max_tokens=16_000, system=SYSTEM, tools=TOOLS, messages=self.messages,
+            model=MODEL, max_tokens=16_000, system=self.system, tools=TOOLS, messages=self.messages,
             thinking={"type": "adaptive", "display": "summarized"}, output_config={"effort": "high"},
             betas=["server-side-fallback-2026-07-01"], fallbacks="default")
         self.log("response", response.to_dict())
@@ -260,7 +286,7 @@ class ClaudeCode:
     INSTRUCTION = ("\n\nAnswer every turn with one JSON object: action run_trial (to test tactics) or submit "
                    "(to finish), the tactics, and note: your hypothesis for a trial, or your reasoning for submit.")
 
-    def __init__(self, log, workdir):
+    def __init__(self, log, workdir, system):
         import shutil
         import subprocess
         import uuid
@@ -269,6 +295,7 @@ class ClaudeCode:
         if not os.path.exists(self.binary):
             sys.exit("claude not found; install Claude Code and sign in, or drop --via claude-code")
         self.log = log
+        self.system = system
         self.workdir = workdir
         self.session = str(uuid.uuid4())
         self.started = False
@@ -283,7 +310,7 @@ class ClaudeCode:
                    "--json-schema", json.dumps(self.SCHEMA), "--model", MODEL, "--effort", "high",
                    "--setting-sources", "", "--strict-mcp-config"]
         command += ["--resume", self.session] if self.started else \
-            ["--session-id", self.session, "--system-prompt", SYSTEM + self.INSTRUCTION]
+            ["--session-id", self.session, "--system-prompt", self.system + self.INSTRUCTION]
         done = self.subprocess.run(command, cwd=self.workdir, capture_output=True, text=True, timeout=1_200)
         self.started = True
         self.turns += 1
@@ -303,6 +330,47 @@ class ClaudeCode:
 
     def answer(self, results):
         self.pending = "\n\n".join(text for _, text, _ in results)
+
+
+class RandomSearch:
+    """The baseline Claude has to beat: tactics drawn at random within the same bounds, with
+    the same trial budget. Sizes and times are drawn log-uniformly, so small and large
+    values are equally likely. It submits its best trial: the most lift among the
+    unflagged ones, or the most lift at all if every trial was flagged."""
+
+    def __init__(self, log, seed, trials):
+        import random
+        self.random = random.Random(seed)
+        self.log = log
+        self.trials = trials  # the harness's list, to pick the best at the end
+        self.budget = None
+        self.used = 0
+
+    def start(self, opening):
+        self.budget = int(opening.rsplit("You have ", 1)[1].split()[0])
+
+    def draw(self):
+        r = self.random
+        log_uniform = lambda low, high: math.exp(r.uniform(math.log(low), math.log(high)))
+        step_min = int(log_uniform(200, 30_000))
+        return {"layers": r.randint(1, 8), "fakeSize": round(log_uniform(0.005, 0.15), 4),
+                "fakeOffsetCents": int(round(log_uniform(1, 50))), "fakeGapCents": int(round(log_uniform(1, 20))),
+                "realSize": round(log_uniform(0.005, 0.05), 4), "realFirst": r.random() < 0.5,
+                "stepMinMs": step_min, "stepMaxMs": int(log_uniform(step_min, 30_000)),
+                "restMs": int(log_uniform(5_000, 600_000))}
+
+    def calls(self):
+        if self.used < self.budget:
+            self.used += 1
+            return [("random-%d" % self.used, "run_trial", dict(self.draw(), hypothesis="random draw"))]
+        tried = self.trials[1:]
+        clean = [t for t in tried if t["summary"]["flaggedMarkets"] == 0]
+        best = max(clean or tried, key=lambda t: t["summary"]["lift"] or 0)
+        return [("random-final", "submit", dict(best["tactics"], layers=best["layers"],
+                                                reasoning="random search: its best trial"))]
+
+    def answer(self, results):
+        pass
 
 
 class Scripted:
@@ -332,8 +400,8 @@ class Scripted:
 
 
 class Live:
-    """The run as it stands, written to progress.json after every change, and an optional
-    local dashboard that polls it: the same page tools/agent/viewer.py builds, in live mode."""
+    """The run as it stands, written to progress.json after every change. The app's
+    surveillance desk (/surveillance, Red team) reads it and shows the run live."""
 
     def __init__(self, out, run):
         self.out = out
@@ -361,25 +429,6 @@ class Live:
             json.dump(self.run, f, default=str)
         os.replace(path + ".tmp", path)
 
-    def serve(self, port):
-        import functools
-        import http.server
-        import viewer
-        with open(os.path.join(self.out, "index.html"), "w") as f:
-            f.write(viewer.live_page())
-
-        class Quiet(http.server.SimpleHTTPRequestHandler):
-            def log_message(self, *args):
-                pass
-
-            def end_headers(self):
-                self.send_header("Cache-Control", "no-store")
-                super().end_headers()
-
-        server = http.server.ThreadingHTTPServer(("127.0.0.1", port), functools.partial(Quiet, directory=self.out))
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        return "http://127.0.0.1:%d/" % port
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -387,16 +436,27 @@ def main():
     parser.add_argument("--workers", type=int, default=6, help="apps running markets at once (default 6)")
     parser.add_argument("--ticks", type=int, default=240, help="ticks per market (default 240, an hour)")
     parser.add_argument("--dry-run", action="store_true", help="scripted tactics instead of Claude")
+    parser.add_argument("--searcher", choices=["claude", "random"], default="claude",
+                        help="who picks the tactics: claude, or random (the baseline Claude has to beat)")
+    parser.add_argument("--search-seed", type=int, default=1, help="random search's seed (default 1)")
+    parser.add_argument("--blind", action="store_true",
+                        help="tell the cheater only flagged or not, never the alert's text")
+    parser.add_argument("--detector", default="spoofing-rules", help="the detector to get past (default spoofing-rules)")
+    parser.add_argument("--no-held-out", action="store_true",
+                        help="skip grading the final tactics on unseen markets (baselines only need the search)")
+    parser.add_argument("--stop-on-success", action="store_true",
+                        help="end the search at the first trial that meets the goal (for baselines)")
     parser.add_argument("--via", choices=["api", "claude-code"], default="api",
                         help="api (ANTHROPIC_API_KEY, the default) or claude-code (claude -p on a claude.ai login)")
     parser.add_argument("--held-out", type=int, default=len(HELD_OUT_SEEDS), help="held-out seeds (default 10)")
-    parser.add_argument("--dashboard", type=int, default=8800, metavar="PORT",
-                        help="serve a live dashboard on this port (default 8800; 0 turns it off)")
-    parser.add_argument("--linger", type=int, default=120, metavar="SECONDS",
-                        help="keep the dashboard up this long after the run ends (default 120)")
     args = parser.parse_args()
+    global DETECTOR
+    DETECTOR = args.detector
+    searcher = "scripted" if args.dry_run else args.searcher
+    suffix = "".join("-" + part for part, on in (("dry", args.dry_run), ("random", searcher == "random"),
+                                                 ("blind", args.blind), ("v2", args.detector.endswith("-v2"))) if on)
 
-    out = os.path.join(ROOT, "target", "agent", time.strftime("%Y%m%d-%H%M%S") + ("-dry" if args.dry_run else ""))
+    out = os.path.join(ROOT, "target", "agent", time.strftime("%Y%m%d-%H%M%S") + suffix)
     os.makedirs(out)
     transcript = open(os.path.join(out, "transcript.jsonl"), "w")
 
@@ -404,21 +464,25 @@ def main():
         transcript.write(json.dumps({"at": time.time(), "kind": kind, "data": data}, default=str) + "\n")
         transcript.flush()
 
-    if args.dry_run:
-        agent = Scripted(log)
-    elif args.via == "claude-code":
-        agent = ClaudeCode(log, out)
-    else:
-        agent = Claude(log)
     held_out = HELD_OUT_SEEDS[:args.held_out]
-    live = Live(out, {"name": os.path.basename(out), "model": None if args.dry_run else MODEL,
-                      "via": None if args.dry_run else args.via, "detector": DETECTOR, "trainSeeds": TRAIN_SEEDS,
+    claude = searcher == "claude"
+    live = Live(out, {"name": os.path.basename(out), "model": MODEL if claude else None,
+                      "via": args.via if claude else None, "searcher": searcher, "blind": args.blind,
+                      "searchSeed": args.search_seed if searcher == "random" else None,
+                      "stopOnSuccess": args.stop_on_success, "detector": DETECTOR, "trainSeeds": TRAIN_SEEDS,
                       "heldOutSeeds": held_out, "ticks": args.ticks, "budget": args.trials,
-                      "trials": [], "final": None, "heldOut": None})
-    if args.dashboard:
-        url = live.serve(args.dashboard)
-        print("live dashboard: %s" % url, flush=True)
+                      "trials": [], "final": None, "heldOut": None, "firstSuccess": None})
     trials = live.run["trials"]
+    system = system_prompt(args.blind)
+    if searcher == "scripted":
+        agent = Scripted(log)
+    elif searcher == "random":
+        agent = RandomSearch(log, args.search_seed, trials)
+    elif args.via == "claude-code":
+        agent = ClaudeCode(log, out, system)
+    else:
+        agent = Claude(log, system)
+    print("watch it live at /surveillance in the app (Red team), run from this checkout", flush=True)
     try:
         with lab.Lab(args.workers) as market:
             def trial(layers, tactics, label, hypothesis=None):
@@ -433,8 +497,8 @@ def main():
             print("trial 0: the built-in spoofer", flush=True)
             layers, tactics = tactics_of(BUILT_IN)
             baseline = trial(layers, tactics, "trial 0", "the built-in spoofer, run by the harness")
-            print(feedback(baseline), flush=True)
-            agent.start("The built-in spoofer, on the training markets:\n" + feedback(baseline)
+            print(feedback(baseline, args.blind), flush=True)
+            agent.start("The built-in spoofer, on the training markets:\n" + feedback(baseline, args.blind)
                         + "\n\nYou have %d trials." % args.trials)
 
             final = None
@@ -459,9 +523,14 @@ def main():
                     print("\ntrial %d: %s\n  %s" % (n, arguments.get("hypothesis", ""),
                                                    json.dumps(dict(layers=layers, **tactics))), flush=True)
                     summary = trial(layers, tactics, "trial %d" % n, arguments.get("hypothesis"))
-                    text = feedback(summary) + "\n%d trials left." % (args.trials - n)
+                    text = feedback(summary, args.blind) + "\n%d trials left." % (args.trials - n)
                     print(text, flush=True)
                     results.append((call_id, text, False))
+                    if succeeded(summary) and live.run["firstSuccess"] is None:
+                        live.run["firstSuccess"] = n
+                    if args.stop_on_success and succeeded(summary):
+                        final = dict(layers=layers, tactics=tactics, reasoning="stopped at the first trial that met the goal")
+                        break
                 for _, text, error in results:
                     log("tool_result", {"text": text, "error": error})
                 agent.answer(results)
@@ -475,13 +544,15 @@ def main():
                                                       live.markets_done))
 
             built_in_layers, built_in = tactics_of(BUILT_IN)
-            graded = {"cheater": grade(final["layers"], final["tactics"], "held-out cheater", "Claude's tactics"),
-                      "built-in": grade(built_in_layers, built_in, "held-out built-in", "the built-in spoofer")}
+            graded = {} if args.no_held_out else {
+                "cheater": grade(final["layers"], final["tactics"], "held-out cheater",
+                                 "Claude's tactics" if claude else "the submitted tactics"),
+                "built-in": grade(built_in_layers, built_in, "held-out built-in", "the built-in spoofer")}
     except BaseException as e:
         live.status(phase="failed", error="%s: %s" % (type(e).__name__, e))
         raise
 
-    live.run["heldOut"] = {name: dict(summary, paired=paired(summary["rows"])) for name, summary in graded.items()}
+    live.run["heldOut"] = {name: dict(summary, paired=paired(summary["rows"])) for name, summary in graded.items()} or None
     live.status(phase="done")
     report = {k: v for k, v in live.run.items() if k not in ("name", "status", "budget")}
     with open(os.path.join(out, "result.json"), "w") as f:
@@ -498,10 +569,7 @@ def main():
             "%.2fx" % summary["lift"] if summary["lift"] else "n/a", p["shares"][0],
             "n/a" if low is None else "%+.0f to %+.0f" % (low, high), p["better"], p["seeds"]))
     print("\nsaved %s" % os.path.relpath(out, ROOT))
-    print("static page: python3 tools/agent/viewer.py %s" % os.path.relpath(out, ROOT))
-    if args.dashboard and args.linger > 0:
-        print("the dashboard stays up %d more seconds" % args.linger, flush=True)
-        time.sleep(args.linger)
+    print("to show it on the public desk: python3 tools/agent/publish.py %s" % os.path.relpath(out, ROOT))
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ HELP.md
 # Front end
 node_modules/
 dist/
+dist-pages/
 .vite/
 *.tsbuildinfo
 npm-debug.log*

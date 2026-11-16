@@ -19,6 +19,22 @@ const BUILT_IN = {
   restMs: 40000,
 };
 const GOAL = 1.5;
+const STATIC = import.meta.env.VITE_STATIC === "1";
+const REPO = "https://github.com/nishantshah0/cross-book";
+
+// Locally the desk reads the app's API. The public build (GitHub Pages) has no app
+// behind it, so it reads the runs committed to docs/runs/, and only those.
+function load(path) {
+  if (!STATIC) return api(path);
+  const file =
+    path === "/red-team/runs"
+      ? "runs.json"
+      : "runs/" + path.split("/").pop() + ".json";
+  return fetch(import.meta.env.BASE_URL + "data/" + file).then((r) => {
+    if (!r.ok) throw new Error("Run not found");
+    return r.json();
+  });
+}
 
 const num = (n, digits = 0) =>
   n == null
@@ -124,7 +140,7 @@ function usePoll(load, ms, deps) {
 export default function Surveillance() {
   const initial = new URLSearchParams(window.location.search);
   const [tab, setTab] = useState(
-    initial.get("tab") === "alerts" ? "alerts" : "red-team",
+    initial.get("tab") === "alerts" && !STATIC ? "alerts" : "red-team",
   );
   const choose = (next) => {
     setTab(next);
@@ -135,15 +151,22 @@ export default function Surveillance() {
   return (
     <div className="terminal surveillance">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="CrossBook home">
+        <a
+          className="brand"
+          href={STATIC ? REPO : "/"}
+          aria-label="CrossBook home"
+        >
           CrossBook
         </a>
         <h1>Surveillance</h1>
         <nav className="desk-tabs" aria-label="Surveillance views">
-          {[
-            ["red-team", "Red team"],
-            ["alerts", "Alerts"],
-          ].map(([id, label]) => (
+          {(STATIC
+            ? [["red-team", "Red team"]]
+            : [
+                ["red-team", "Red team"],
+                ["alerts", "Alerts"],
+              ]
+          ).map(([id, label]) => (
             <button
               key={id}
               className={tab === id ? "active" : ""}
@@ -155,11 +178,20 @@ export default function Surveillance() {
           ))}
         </nav>
         <div className="topbar-right">
-          <a className="secondary topbar-link" href="/terminal">
-            Terminal
+          <a
+            className="secondary topbar-link"
+            href={STATIC ? REPO : "/terminal"}
+          >
+            {STATIC ? "GitHub" : "Terminal"}
           </a>
         </div>
       </header>
+      {STATIC && (
+        <p className="notice static-note">
+          Recorded runs from the repo: pick one and press Replay. Clone it to
+          watch runs live and to see the alert queue.
+        </p>
+      )}
       <main>{tab === "alerts" ? <Alerts /> : <RedTeam />}</main>
     </div>
   );
@@ -168,7 +200,7 @@ export default function Surveillance() {
 /* ---------- red team ---------- */
 
 function RedTeam() {
-  const runs = usePoll(() => api("/red-team/runs"), 4000, []);
+  const runs = usePoll(() => load("/red-team/runs"), STATIC ? 0 : 4000, []);
   const [picked, setPicked] = useState(
     new URLSearchParams(window.location.search).get("run"),
   );
@@ -212,7 +244,11 @@ function RedTeam() {
                 <span className="run-top">
                   <PhaseDot phase={r.phase} />
                   <strong>{runDate(r.name)}</strong>
-                  {r.name.endsWith("-dry") && <span className="tag">dry</span>}
+                  {runTags(r).map((t) => (
+                    <span className="tag" key={t}>
+                      {t}
+                    </span>
+                  ))}
                 </span>
                 <span className="run-sub">
                   {r.flaggedHeldOut != null
@@ -229,11 +265,7 @@ function RedTeam() {
                       " trials used"}
                 </span>
                 <span className="run-sub faint">
-                  {r.model
-                    ? r.model +
-                      (r.via === "claude-code" ? " · Claude Code" : "")
-                    : "scripted"}{" "}
-                  · {ago(r.updatedAt)}
+                  {who(r)} · {ago(r.updatedAt)}
                 </span>
               </button>
             </li>
@@ -243,6 +275,65 @@ function RedTeam() {
       {selected ? <Run name={selected} key={selected} /> : <div />}
     </div>
   );
+}
+
+function runTags(r) {
+  return [
+    r.searcher === "scripted" && "dry",
+    r.searcher === "random" && "random",
+    r.blind && "blind",
+    r.detector &&
+      r.detector !== "spoofing-rules" &&
+      r.detector.replace("spoofing-rules-", ""),
+  ].filter(Boolean);
+}
+
+function who(r) {
+  if (r.searcher === "random") return "random search";
+  if (!r.model) return "scripted";
+  return r.model + (r.via === "claude-code" ? " · Claude Code" : "");
+}
+
+// A finished run, as it looked partway through: step k has the first k trials done and
+// the next one running; then grading; then the end. Replay steps through these.
+function replayView(run, step) {
+  const n = run.trials.length;
+  const markets = 2 * run.trainSeeds.length;
+  if (step < n) {
+    const next = run.trials[step];
+    return {
+      ...run,
+      trials: run.trials.slice(0, step),
+      final: null,
+      heldOut: null,
+      status: {
+        phase: "trial",
+        replay: true,
+        trial: step,
+        hypothesis: next.hypothesis,
+        layers: next.layers,
+        tactics: next.tactics,
+        done: markets / 2,
+        total: markets,
+      },
+    };
+  }
+  if (step === n && run.final)
+    return {
+      ...run,
+      heldOut: null,
+      status: {
+        phase: "grading",
+        replay: true,
+        who:
+          run.searcher === "random"
+            ? "the best random draw"
+            : "Claude's tactics",
+        done: run.heldOutSeeds.length,
+        total: 2 * run.heldOutSeeds.length,
+      },
+    };
+  return run;
 }
 
 const LIVE = new Set(["starting", "trial", "thinking", "grading"]);
@@ -271,27 +362,41 @@ function PhaseDot({ phase }) {
 }
 
 function Run({ name }) {
-  const [live, setLive] = useState(true);
-  const { data: run, error } = usePoll(
+  const [live, setLive] = useState(!STATIC);
+  const { data, error } = usePoll(
     async () => {
-      const r = await api("/red-team/runs/" + name);
-      setLive(LIVE.has(r.status?.phase));
+      const r = await load("/red-team/runs/" + name);
+      setLive(!STATIC && LIVE.has(r.status?.phase));
       return r;
     },
     live ? 2000 : 0,
     [name, live],
   );
+  const autoplay = new URLSearchParams(window.location.search).has("replay");
+  const [replay, setReplay] = useState(autoplay ? 0 : null);
+  const steps = data ? data.trials.length + 2 : 0;
+  useEffect(() => {
+    if (replay == null || !data) return;
+    if (replay >= steps - 1) return setReplay(null);
+    const t = setTimeout(
+      () => setReplay(replay + 1),
+      replay === 0 ? 2600 : 3400,
+    );
+    return () => clearTimeout(t);
+  }, [replay, data, steps]);
   const [, redraw] = useState(0);
   useEffect(() => {
     const t = setInterval(() => redraw((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, []);
-  if (!run)
+  if (!data)
     return (
       <section className="run-main">
         <p className="desk-error">{error || "Loading…"}</p>
       </section>
     );
+  const run = replay == null ? data : replayView(data, replay);
+  const finished = data.status?.phase === "done";
   const status = run.status || { phase: "done" };
   const trials = run.trials || [];
   const cheater = run.heldOut?.cheater;
@@ -309,18 +414,31 @@ function Run({ name }) {
         <div>
           <h2>{headline(run, cheater)}</h2>
           <p className="muted">
-            {run.model
-              ? run.model +
-                (run.via === "claude-code"
-                  ? " via Claude Code"
-                  : " via the API")
-              : "Scripted dry run"}{" "}
-            · detector <code>{run.detector}</code> · training seeds{" "}
+            {run.searcher === "random"
+              ? "Random search, seed " + run.searchSeed
+              : run.model
+                ? run.model +
+                  (run.via === "claude-code"
+                    ? " via Claude Code"
+                    : " via the API")
+                : "Scripted dry run"}
+            {run.blind ? " · blind: alert text withheld" : ""} · detector{" "}
+            <code>{run.detector}</code> · training seeds{" "}
             {run.trainSeeds.join(", ")} · held-out seeds {run.heldOutSeeds[0]}–
             {run.heldOutSeeds.at(-1)} · {run.ticks / 4} min markets
           </p>
         </div>
-        <StatusPill status={status} />
+        <div className="run-actions">
+          {finished && (
+            <button
+              className="secondary replay"
+              onClick={() => setReplay(replay == null ? 0 : null)}
+            >
+              {replay == null ? "Replay" : "Stop replay"}
+            </button>
+          )}
+          <StatusPill status={status} />
+        </div>
       </div>
 
       <div className="account-strip kpis" aria-label="Run summary">
@@ -514,19 +632,39 @@ function interval(m) {
 
 function headline(run, cheater) {
   const phase = run.status?.phase;
+  const actor =
+    run.searcher === "random"
+      ? "Random search"
+      : run.searcher === "scripted" || !run.model
+        ? "A scripted run"
+        : "Claude";
+  const its = actor === "Claude" ? "Claude's" : "its";
   if (cheater) {
     const ci = cheater.paired.shares;
     if (cheater.flaggedSpoofers)
-      return "The detector held: Claude's spoofer was caught";
+      return (
+        "The detector held: " + its + " spoofer was caught on unseen markets"
+      );
     if (cheater.lift >= GOAL && ci[1] != null && ci[1] > 0)
-      return "Claude got a spoofer past the detector, and the fakes still worked";
+      return (
+        actor + " got a spoofer past the detector, and the fakes still worked"
+      );
     if (cheater.lift >= GOAL)
-      return "Claude got past the detector; whether the fakes still work isn't settled";
-    return "Claude got past the detector, but the fakes stopped working";
+      return (
+        actor +
+        " got past the detector; whether the fakes still work isn't settled"
+      );
+    return actor + " got past the detector, but the fakes stopped working";
   }
   if (phase === "failed") return "This run stopped before it finished";
-  if (run.final) return "Claude has submitted; grading on unseen markets";
-  return "Claude is searching for tactics the detector misses";
+  if (phase === "done")
+    return run.firstSuccess
+      ? actor + " got past the detector in trial " + run.firstSuccess
+      : actor +
+          " found nothing that got past the detector in " +
+          plural(run.budget, "trial");
+  if (run.final) return actor + " has submitted; grading on unseen markets";
+  return actor + " is searching for tactics the detector misses";
 }
 
 function StatusPill({ status }) {
@@ -545,8 +683,14 @@ function StatusPill({ status }) {
   return (
     <span className={"status-pill " + (LIVE.has(phase) ? "live" : phase)}>
       <PhaseDot phase={phase} />
-      <span>{LIVE.has(phase) ? "Live · " + text : text}</span>
-      {LIVE.has(phase) && updatedAt && <small>{ago(updatedAt * 1000)}</small>}
+      <span>
+        {LIVE.has(phase)
+          ? (status.replay ? "Replay · " : "Live · ") + text
+          : text}
+      </span>
+      {LIVE.has(phase) && updatedAt && !status.replay && (
+        <small>{ago(updatedAt * 1000)}</small>
+      )}
     </span>
   );
 }

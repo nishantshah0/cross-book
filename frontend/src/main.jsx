@@ -10,11 +10,15 @@ import "./style.css";
 import "./home.css";
 import "./surveillance.css";
 const path = window.location.pathname;
-const page = /^\/terminal\/?$/.test(path)
-  ? "terminal"
-  : /^\/surveillance\/?$/.test(path)
+// the public build (GitHub Pages) is the surveillance desk alone, on recorded runs
+const page =
+  import.meta.env.VITE_STATIC === "1"
     ? "surveillance"
-    : "home";
+    : /^\/terminal\/?$/.test(path)
+      ? "terminal"
+      : /^\/surveillance\/?$/.test(path)
+        ? "surveillance"
+        : "home";
 document.title = {
   terminal: "CrossBook — Trading terminal",
   surveillance: "CrossBook — Surveillance",

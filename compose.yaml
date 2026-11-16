@@ -37,6 +37,10 @@ services:
       HOUSE_DEPTH_SHARES: ${HOUSE_DEPTH_SHARES:-500}
       HOUSE_IMPACT_DECAY: ${HOUSE_IMPACT_DECAY:-0.25}
       HOUSE_IMBALANCE_BPS: ${HOUSE_IMBALANCE_BPS:-4}
+      # AI cheater runs from tools/agent/cheater.py, for the surveillance desk's red-team tab
+      RED_TEAM_RUNS_DIR: /red-team
+    volumes:
+      - ./target/agent:/red-team:ro
     depends_on:
       postgres:
         condition: service_healthy

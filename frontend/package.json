@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
+    "build:pages": "VITE_STATIC=1 PAGES_BASE=/cross-book/ vite build --outDir dist-pages",
     "preview": "vite preview --host 127.0.0.1",
     "test": "playwright test",
     "format:check": "prettier --check src index.html vite.config.js playwright.config.js tests cypress.config.js cypress",
