@@ -23,6 +23,9 @@ target/agent/<time>/.
 
     caffeinate -i uv run tools/agent/cheater.py --via claude-code   # on a claude.ai login instead
 
+While it runs, http://127.0.0.1:8800/ is a live dashboard of the run (--dashboard 0 turns
+it off), and tools/agent/viewer.py turns a finished run into a static page.
+
     uv run tools/agent/cheater.py --dry-run       # the same loop with scripted tactics, no API calls
 
 Needs Docker, Java 21 and uv. Costs a few dollars of API use at the defaults; with
@@ -34,10 +37,12 @@ import json
 import os
 import statistics
 import sys
+import threading
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "tools", "lab"))
+sys.path.insert(0, os.path.join(ROOT, "tools", "agent"))
 import lab  # noqa: E402  (tools/lab/lab.py: the parallel market runner)
 
 MODEL = "claude-opus-5-5"
@@ -326,6 +331,56 @@ class Scripted:
             self.log("tool_result", text)
 
 
+class Live:
+    """The run as it stands, written to progress.json after every change, and an optional
+    local dashboard that polls it: the same page tools/agent/viewer.py builds, in live mode."""
+
+    def __init__(self, out, run):
+        self.out = out
+        self.run = run
+        self.lock = threading.Lock()
+        self.status(phase="starting")
+
+    def status(self, **status):
+        with self.lock:
+            self.run["status"] = dict(status, updatedAt=time.time())
+            self._write()
+
+    def markets_done(self, done, total):
+        with self.lock:
+            self.run["status"].update(done=done, total=total, updatedAt=time.time())
+            self._write()
+
+    def save(self):
+        with self.lock:
+            self._write()
+
+    def _write(self):
+        path = os.path.join(self.out, "progress.json")
+        with open(path + ".tmp", "w") as f:
+            json.dump(self.run, f, default=str)
+        os.replace(path + ".tmp", path)
+
+    def serve(self, port):
+        import functools
+        import http.server
+        import viewer
+        with open(os.path.join(self.out, "index.html"), "w") as f:
+            f.write(viewer.live_page())
+
+        class Quiet(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def end_headers(self):
+                self.send_header("Cache-Control", "no-store")
+                super().end_headers()
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", port), functools.partial(Quiet, directory=self.out))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return "http://127.0.0.1:%d/" % port
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--trials", type=int, default=10, help="trials Claude may run (default 10)")
@@ -335,6 +390,10 @@ def main():
     parser.add_argument("--via", choices=["api", "claude-code"], default="api",
                         help="api (ANTHROPIC_API_KEY, the default) or claude-code (claude -p on a claude.ai login)")
     parser.add_argument("--held-out", type=int, default=len(HELD_OUT_SEEDS), help="held-out seeds (default 10)")
+    parser.add_argument("--dashboard", type=int, default=8800, metavar="PORT",
+                        help="serve a live dashboard on this port (default 8800; 0 turns it off)")
+    parser.add_argument("--linger", type=int, default=120, metavar="SECONDS",
+                        help="keep the dashboard up this long after the run ends (default 120)")
     args = parser.parse_args()
 
     out = os.path.join(ROOT, "target", "agent", time.strftime("%Y%m%d-%H%M%S") + ("-dry" if args.dry_run else ""))
@@ -351,59 +410,80 @@ def main():
         agent = ClaudeCode(log, out)
     else:
         agent = Claude(log)
-    trials = []
     held_out = HELD_OUT_SEEDS[:args.held_out]
-    with lab.Lab(args.workers) as market:
-        def trial(layers, tactics, label, hypothesis=None):
-            summary = summarize(TRAIN_SEEDS, market.run(markets(TRAIN_SEEDS, layers, tactics, args.ticks), label))
-            trials.append(dict(layers=layers, tactics=tactics, hypothesis=hypothesis, summary=summary))
-            return summary
+    live = Live(out, {"name": os.path.basename(out), "model": None if args.dry_run else MODEL,
+                      "via": None if args.dry_run else args.via, "detector": DETECTOR, "trainSeeds": TRAIN_SEEDS,
+                      "heldOutSeeds": held_out, "ticks": args.ticks, "budget": args.trials,
+                      "trials": [], "final": None, "heldOut": None})
+    if args.dashboard:
+        url = live.serve(args.dashboard)
+        print("live dashboard: %s" % url, flush=True)
+    trials = live.run["trials"]
+    try:
+        with lab.Lab(args.workers) as market:
+            def trial(layers, tactics, label, hypothesis=None):
+                live.status(phase="trial", trial=len(trials), label=label, hypothesis=hypothesis,
+                            layers=layers, tactics=tactics, done=0, total=2 * len(TRAIN_SEEDS))
+                summary = summarize(TRAIN_SEEDS, market.run(markets(TRAIN_SEEDS, layers, tactics, args.ticks), label,
+                                                            live.markets_done))
+                trials.append(dict(layers=layers, tactics=tactics, hypothesis=hypothesis, summary=summary))
+                live.save()
+                return summary
 
-        print("trial 0: the built-in spoofer", flush=True)
-        layers, tactics = tactics_of(BUILT_IN)
-        baseline = trial(layers, tactics, "trial 0", "the built-in spoofer, run by the harness")
-        print(feedback(baseline), flush=True)
-        agent.start("The built-in spoofer, on the training markets:\n" + feedback(baseline)
-                    + "\n\nYou have %d trials." % args.trials)
+            print("trial 0: the built-in spoofer", flush=True)
+            layers, tactics = tactics_of(BUILT_IN)
+            baseline = trial(layers, tactics, "trial 0", "the built-in spoofer, run by the harness")
+            print(feedback(baseline), flush=True)
+            agent.start("The built-in spoofer, on the training markets:\n" + feedback(baseline)
+                        + "\n\nYou have %d trials." % args.trials)
 
-        final = None
-        while final is None:
-            results = []
-            for call_id, name, arguments in agent.calls():
-                log("call", {"name": name, "input": arguments})
-                try:
-                    layers, tactics = tactics_of(arguments)
-                except ValueError as e:
-                    results.append((call_id, "Error: %s" % e, True))
-                    continue
-                if name == "submit":
-                    final = dict(layers=layers, tactics=tactics, reasoning=arguments.get("reasoning", ""))
-                    results.append((call_id, "Submitted.", False))
-                    continue
-                if len(trials) > args.trials:
-                    results.append((call_id, "Error: no trials left; call submit with your best tactics.", True))
-                    continue
-                n = len(trials)
-                print("\ntrial %d: %s\n  %s" % (n, arguments.get("hypothesis", ""), json.dumps(dict(layers=layers, **tactics))),
-                      flush=True)
-                summary = trial(layers, tactics, "trial %d" % n, arguments.get("hypothesis"))
-                text = feedback(summary) + "\n%d trials left." % (args.trials - n)
-                print(text, flush=True)
-                results.append((call_id, text, False))
-            agent.answer(results)
-        print("\nsubmitted: %s\n  %s" % (json.dumps(dict(layers=final["layers"], **final["tactics"])), final["reasoning"]),
-              flush=True)
+            final = None
+            while final is None:
+                results = []
+                live.status(phase="thinking", trial=len(trials))
+                for call_id, name, arguments in agent.calls():
+                    log("call", {"name": name, "input": arguments})
+                    try:
+                        layers, tactics = tactics_of(arguments)
+                    except ValueError as e:
+                        results.append((call_id, "Error: %s" % e, True))
+                        continue
+                    if name == "submit":
+                        final = dict(layers=layers, tactics=tactics, reasoning=arguments.get("reasoning", ""))
+                        results.append((call_id, "Submitted.", False))
+                        continue
+                    if len(trials) > args.trials:
+                        results.append((call_id, "Error: no trials left; call submit with your best tactics.", True))
+                        continue
+                    n = len(trials)
+                    print("\ntrial %d: %s\n  %s" % (n, arguments.get("hypothesis", ""),
+                                                   json.dumps(dict(layers=layers, **tactics))), flush=True)
+                    summary = trial(layers, tactics, "trial %d" % n, arguments.get("hypothesis"))
+                    text = feedback(summary) + "\n%d trials left." % (args.trials - n)
+                    print(text, flush=True)
+                    results.append((call_id, text, False))
+                for _, text, error in results:
+                    log("tool_result", {"text": text, "error": error})
+                agent.answer(results)
+            live.run["final"] = final
+            print("\nsubmitted: %s\n  %s" % (json.dumps(dict(layers=final["layers"], **final["tactics"])),
+                                             final["reasoning"]), flush=True)
 
-        def grade(layers, tactics, label):
-            return summarize(held_out, market.run(markets(held_out, layers, tactics, args.ticks), label))
+            def grade(layers, tactics, label, who):
+                live.status(phase="grading", label=label, who=who, done=0, total=2 * len(held_out))
+                return summarize(held_out, market.run(markets(held_out, layers, tactics, args.ticks), label,
+                                                      live.markets_done))
 
-        built_in_layers, built_in = tactics_of(BUILT_IN)
-        graded = {"cheater": grade(final["layers"], final["tactics"], "held-out cheater"),
-                  "built-in": grade(built_in_layers, built_in, "held-out built-in")}
+            built_in_layers, built_in = tactics_of(BUILT_IN)
+            graded = {"cheater": grade(final["layers"], final["tactics"], "held-out cheater", "Claude's tactics"),
+                      "built-in": grade(built_in_layers, built_in, "held-out built-in", "the built-in spoofer")}
+    except BaseException as e:
+        live.status(phase="failed", error="%s: %s" % (type(e).__name__, e))
+        raise
 
-    report = {"model": None if args.dry_run else MODEL, "via": None if args.dry_run else args.via, "detector": DETECTOR, "trainSeeds": TRAIN_SEEDS,
-              "heldOutSeeds": held_out, "ticks": args.ticks, "trials": trials, "final": final,
-              "heldOut": {name: dict(summary, paired=paired(summary["rows"])) for name, summary in graded.items()}}
+    live.run["heldOut"] = {name: dict(summary, paired=paired(summary["rows"])) for name, summary in graded.items()}
+    live.status(phase="done")
+    report = {k: v for k, v in live.run.items() if k not in ("name", "status", "budget")}
     with open(os.path.join(out, "result.json"), "w") as f:
         json.dump(report, f, indent=1)
 
@@ -418,6 +498,10 @@ def main():
             "%.2fx" % summary["lift"] if summary["lift"] else "n/a", p["shares"][0],
             "n/a" if low is None else "%+.0f to %+.0f" % (low, high), p["better"], p["seeds"]))
     print("\nsaved %s" % os.path.relpath(out, ROOT))
+    print("static page: python3 tools/agent/viewer.py %s" % os.path.relpath(out, ROOT))
+    if args.dashboard and args.linger > 0:
+        print("the dashboard stays up %d more seconds" % args.linger, flush=True)
+        time.sleep(args.linger)
 
 
 if __name__ == "__main__":

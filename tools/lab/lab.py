@@ -201,8 +201,9 @@ class Lab:
             json.dump(result, f)
         os.replace(target + ".tmp", target)
 
-    def run(self, tasks, label):
-        """Runs (path, body) tasks across the workers, as jobs; returns results in task order."""
+    def run(self, tasks, label, on_done=None):
+        """Runs (path, body) tasks across the workers, as jobs; returns results in task order.
+        on_done(done, total), if given, is called after each one finishes."""
         work = queue.Queue()
         for index, task in enumerate(tasks):
             work.put((index, task))
@@ -230,6 +231,8 @@ class Lab:
                 with lock:
                     done[0] += 1
                     print("  %s %d/%d done (%.0fs)" % (label, done[0], len(tasks), time.time() - started), flush=True)
+                    if on_done:
+                        on_done(done[0], len(tasks))
 
         threads = [threading.Thread(target=worker, args=(url,)) for url in self.urls]
         for thread in threads:
