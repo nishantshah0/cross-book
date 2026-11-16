@@ -1,1 +1,19 @@
-[]
+[
+ {
+  "name": "20261116-170055",
+  "phase": "done",
+  "model": "claude-opus-5-5",
+  "via": "claude-code",
+  "searcher": "claude",
+  "blind": false,
+  "detector": "spoofing-rules",
+  "trials": 9,
+  "budget": 9,
+  "firstSuccess": null,
+  "flaggedHeldOut": 0,
+  "spoofersHeldOut": 20,
+  "lift": 1.6108982545764154,
+  "builtInLift": 2.0471204188481678,
+  "updatedAt": 1794871572081
+ }
+]
