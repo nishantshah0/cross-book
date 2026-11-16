@@ -7,6 +7,9 @@ import io.github.nishantshah0.papertrader.bots.BotKind;
 import io.github.nishantshah0.papertrader.bots.BotRunReport;
 import io.github.nishantshah0.papertrader.bots.BotRunRequest;
 import io.github.nishantshah0.papertrader.bots.BotRunner;
+import io.github.nishantshah0.papertrader.grading.Grader;
+import io.github.nishantshah0.papertrader.grading.Score;
+import io.github.nishantshah0.papertrader.surveillance.Surveillance;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +48,12 @@ class BotMarketTest extends ApiTestSupport {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    Surveillance surveillance;
+
+    @Autowired
+    Grader grader;
 
     @Test
     void theSameRequestReplaysExactly() {
@@ -178,6 +187,56 @@ class BotMarketTest extends ApiTestSupport {
         assertThat(answerKey.entries()).filteredOn(e -> e.kind() == BotKind.SPOOFER).hasSize(2)
                 .noneMatch(AnswerKey.Entry::cheater);
         assertThat(answerKey.orders()).isNotEmpty().allMatch(o -> o.role().equals("REAL"));
+    }
+
+    // The rules catch both spoofers and flag nobody honest, and the orders they point
+    // at are the fakes. The naive baseline catches them too, but also the market makers.
+    @Test
+    void theRulesCatchTheSpoofersAndTheBaselineAlsoFlagsTheMakers() throws Exception {
+        runner.run(new BotRunRequest(21L, 80, NOISE, MAKERS, 10, VALUE, 2, 4, SYMBOLS));
+
+        Score rules = grader.grade("spoofing-rules", surveillance.scan("spoofing-rules"));
+        assertThat(rules.caught()).isEqualTo(2);
+        assertThat(rules.falseAlarms()).isZero();
+        assertThat(rules.orders().precision()).isGreaterThanOrEqualTo(0.95);
+        assertThat(rules.orders().recall()).isGreaterThan(0.6);
+
+        Score baseline = grader.grade("cancel-ratio", surveillance.scan("cancel-ratio"));
+        assertThat(baseline.caught()).isEqualTo(2);
+        assertThat(baseline.falseAlarmsByKind()).containsKey(BotKind.MARKET_MAKER);
+        assertThat(baseline.orders()).isNull(); // it judges accounts, not orders
+
+        // and the same over HTTP
+        assertThat(readList(get("/api/surveillance/detectors"), new tools.jackson.core.type.TypeReference<
+                List<String>>() { })).containsExactly("cancel-ratio", "spoofing-rules");
+        var alerts = json.readTree(get("/api/surveillance/alerts").getResponse().getContentAsString());
+        assertThat(alerts.size()).isEqualTo(2);
+        assertThat(alerts.get(0).get("username").asString()).startsWith("trader_");
+        assertThat(alerts.get(0).get("evidence").size()).isGreaterThan(10);
+        var score = json.readTree(get("/api/surveillance/score?detector=spoofing-rules").getResponse()
+                .getContentAsString());
+        assertThat(score.get("caught").asInt()).isEqualTo(2);
+        assertThat(get("/api/surveillance/alerts?detector=nope")).hasStatus(HttpStatus.NOT_FOUND);
+    }
+
+    // The control spoofer trades exactly like the spoofer minus the fakes. The rules
+    // must leave it alone; the baseline cannot tell the difference.
+    @Test
+    void theRulesLeaveTheControlAloneAndTheBaselineDoesNot() {
+        runner.run(new BotRunRequest(21L, 80, NOISE, MAKERS, 10, VALUE, 2, 0, SYMBOLS));
+        assertThat(surveillance.scan("spoofing-rules")).isEmpty();
+        assertThat(grader.grade("cancel-ratio", surveillance.scan("cancel-ratio")).falseAlarmsByKind())
+                .containsKey(BotKind.SPOOFER);
+    }
+
+    @Test
+    void anEvaluationScoresEveryDetectorOnBothMarkets() throws Exception {
+        var result = post("/api/surveillance/evaluations", "{\"seeds\": [21], \"ticks\": 20}");
+        assertThat(result).hasStatus(HttpStatus.OK);
+        var report = json.readTree(result.getResponse().getContentAsString());
+        assertThat(report.get("runs").size()).isEqualTo(2);
+        assertThat(report.get("totals").size()).isEqualTo(4); // two detectors, two markets
+        assertThat(post("/api/surveillance/evaluations", "{\"seeds\": []}")).hasStatus(HttpStatus.BAD_REQUEST);
     }
 
     private static BotRunRequest request(long seed) {

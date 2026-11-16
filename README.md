@@ -12,7 +12,7 @@ Run 140 simulated traders, spoofers included, and replay the market to the milli
 ![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
 
-[Quick start](#quick-start) · [How matching works](#how-matching-works) · [Architecture](#architecture) · [API](#api) · [Design notes](docs/architecture.md)
+[Quick start](#quick-start) · [Catching the spoofers](#catching-the-spoofers) · [How matching works](#how-matching-works) · [Architecture](#architecture) · [API](#api) · [Design notes](docs/architecture.md)
 
 <img src="docs/dashboard.png" alt="The trading terminal: watchlist, chart, order book and order ticket" width="900">
 
@@ -26,6 +26,7 @@ Run 140 simulated traders, spoofers included, and replay the market to the milli
 - **A simulated market maker.** The house quotes a bid and an ask around the feed price, so a market order always has something to trade with, even if you're the only user.
 - **One matcher thread per symbol.** Symbols match in parallel and nothing within a symbol interleaves. Postgres stays the source of truth.
 - **Books that always balance.** The house keeps its own books, so every dollar and share a user gains, the house gives up. A ledger audit proves nothing was created or destroyed, and it runs after every integration test.
+- **Surveillance that's graded honestly.** A rule-based spoofing detector caught 10 of 10 spoofers on five unseen seeds with no false alarms across 1,390 honest accounts, against a cancel-ratio baseline that raised 85. Every alert cites the event-log lines behind it.
 - **A bot market with a planted cheater.** One command runs 140 simulated traders for an hour of market time in about a minute, including spoofers whose fake orders measurably pay off against an honest control. The same seed gives the same market down to the millisecond, and only a separate answer key says who cheated, order by order.
 - **A complete audit trail.** Every order event (placed, partly filled, filled, cancelled, rejected) is logged with a sequence number in the same transaction as the change, so the log never disagrees with the books.
 - **Safe under concurrency.** Accounts are locked in ID order so trades can't deadlock, the book changes only after the transaction commits, and retries with an `Idempotency-Key` never place the same order twice.
@@ -188,6 +189,31 @@ What's still simplified: noise traders are purely random, with no momentum or he
 
 **Simplifications.** Fills are whole-share and long-only, with no commissions, shorting, or slippage beyond the house spread.
 
+## Catching the spoofers
+
+Two detectors read the order event log, and only the event log. A test fails if the detector code ever mentions the answer key or the bots. Grading happens in a separate package that holds the alerts and the answer key side by side.
+
+- **Spoofing rules.** These follow how exchange rules describe spoofing: large orders with no intent to trade, while the same trader trades a smaller order the other way. An order is suspect if it's a limit order that was cancelled less than a quarter filled within 10 seconds, and the same account placed an order at least 3 times smaller on the other side of that stock while it rested. That other order has to come strictly later, so a market maker posting its bid and ask together doesn't count. Three or more such episodes raise an alert, and the alert cites the exact event-log lines behind it.
+- **Cancel-ratio baseline.** The naive check every rule has to beat: flag anyone who cancels at least 80% of their limit orders.
+
+The rules' thresholds were set on seeds 1 to 3 and then frozen. Scored on five seeds they never saw (101 to 105), with one hour of market time each and every spoofed market paired with its control market:
+
+| Detector | Spoofers caught | False alarms | Precision | Fake orders found |
+| --- | ---: | ---: | ---: | ---: |
+| **Spoofing rules** | **10 / 10** | **0** | **100%** | **88%** (2,319 of 2,645, none wrong) |
+| Cancel-ratio baseline | 10 / 10 | 85 | 11% | – |
+
+The baseline's 85 false alarms are 75 honest market makers, which re-quote all day, and all 10 control spoofers, which trade exactly like the spoofers minus the fakes. The rules flagged none of the 1,390 honest accounts across the ten markets, the control spoofers included. On seed 101 they missed 81 fakes. 58 were less than 3 times the real order, usually a spoofer's last fake ask, cut short when it ran low on shares. 14 came from schemes where no real order was placed, and 9 got a quarter or more filled before the cancel. An account is still caught by its other episodes, so these only cost order-level recall.
+
+What this doesn't show yet: the rules were written knowing what this spoofer does. Held-out seeds test whether they hold up in different markets, not against a cheater who changes how it spoofs. That's the next step: a cheater that adapts to the detector.
+
+```bash
+curl -X POST localhost:8080/api/surveillance/evaluations -H 'Content-Type: application/json' \
+  -d '{"seeds": [101, 102, 103, 104, 105]}'                  # about 12 minutes; resets the exchange
+curl 'localhost:8080/api/surveillance/alerts?detector=spoofing-rules'   # on the market as it stands
+curl 'localhost:8080/api/surveillance/score?detector=spoofing-rules'    # the same, graded
+```
+
 ## Architecture
 
 ### System overview
@@ -333,6 +359,8 @@ The schema is managed by Flyway, and Hibernate only validates it. Check constrai
 src/main/java/.../papertrader/
 ├── account/      accounts and users
 ├── bots/         the bot runner, the honest bots, the spoofer and the answer key
+├── surveillance/ the detectors, which read only the event log
+├── grading/      scoring alerts against the answer key, and multi-seed evaluations
 ├── ledger/       the ledger audit
 ├── portfolio/    portfolio valuation, P&L and the leaderboard
 ├── quote/        price feed, quote cache and history
@@ -477,6 +505,10 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | POST   | `/api/bots/runs`                        | Run a whole bot market (book mode, simulated clock); returns the report |
 | GET    | `/api/bots/answer-key`                  | Which account is which bot, for grading     |
 | GET    | `/api/bots/answer-key/orders`           | Every spoofer order, labelled `SPOOF` or `REAL` by episode |
+| GET    | `/api/surveillance/detectors`           | The detectors                              |
+| GET    | `/api/surveillance/alerts?detector=`    | A detector's alerts on the current market, with the event-log lines behind each |
+| GET    | `/api/surveillance/score?detector=`     | Those alerts graded against the answer key |
+| POST   | `/api/surveillance/evaluations`         | Score every detector on a spoofed and a control market per seed |
 | GET    | `/actuator/health`                      | Health check                               |
 
 <details>
@@ -504,7 +536,7 @@ Leave out `type` and `limitPrice` for a market order.
 
 ## What I'd do next
 
-- **A detector.** A surveillance system that flags spoofing from the order log alone, graded against the answer key, with the control spoofer as its hardest false alarm.
+- **An adaptive cheater.** An AI agent that tunes the spoofer to get past the detector, run after run, so the rules are tested against a cheater who changes tactics rather than one they were written for.
 - **More cheaters.** Wash trading between colluding accounts, and pump-and-dump.
 - **More order types.** Stop orders, time-in-force (IOC, FOK, day) and amend-in-place.
 - **Persist quote history.** Chart history lives in memory and resets on restart.

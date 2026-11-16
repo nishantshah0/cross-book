@@ -212,6 +212,16 @@ Makers and value traders each follow a run of consecutive symbols, about two of 
 
 **Simplifications.** Noise traders are uniformly random, with no momentum or herding. Everything is long-only. Bots act one at a time, which is what makes a run exact, and it caps a run at about 700 actions a second. One spoofing pattern (layering) is built so far; wash trading and pump-and-dump are next.
 
+## Surveillance
+
+Detectors live in `surveillance/` and see a `MarketLog`: every order rebuilt from `order_events` (placed, filled in parts, how it ended, with the sequence number of its `PLACED` event), plus account usernames. That's what a surveillance desk gets from an exchange. `SpoofingRulesTest` reads every source file in the package and fails if one mentions the answer key, the bots or the grading code, so a detector can't peek even by accident.
+
+`grading/` is the only code that holds alerts and the answer key together. A `Score` counts accounts (caught, missed, false alarms by what each account really was) and orders: of the orders labelled `SPOOF`, how many the detector pointed at, and of those it pointed at, how many were `SPOOF`. A spoofer's `REAL` orders count as neither. `Evaluation` runs a spoofed market and its control for each seed and adds up the counts across seeds before dividing, so a seed with no alerts doesn't skew an average.
+
+**The rules' first version missed every spoofer.** It compared an order's size with the stock's median limit order. But market makers place most of the limit orders, so their quote size set the median, and the spoofer's fakes were only about twice that. The fix follows the definition of spoofing more closely: compare the fake with the same trader's own order on the other side. That holds whatever else is in the market. The thresholds were set on seeds 1 to 3, then frozen and scored on 101 to 105.
+
+**Why the market makers aren't caught.** They also place large orders and cancel nearly all of them within seconds, which is exactly why the cancel-ratio baseline flags them. Two things clear them: they post their bid and ask at the same instant, never one after the other, and both sides are the same size.
+
 ## Checks
 
 JUnit/Testcontainers exercises real Postgres migrations and transactional behavior, and audits the ledger and event log after every integration test. The coverage includes concurrent orders, idempotent retries, user-to-user fills across several resting orders and the house, partial fills and cancels, self-trade refusal, and two matcher threads trading between the same accounts at once. The book and engine have unit tests for price-time priority, house priority and when book changes are applied. A scheduled integration test changes a quote and waits for the matcher to fill without another order request. Playwright runs against the packaged app, including two independently subscribed browser tabs, cancellation, server validation, and mobile overflow checks.
