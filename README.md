@@ -384,6 +384,7 @@ docs/architecture.md               design notes and tradeoffs
 docs/performance.md                load test results and bottleneck analysis
 tools/loadtest/                    the load generator
 tools/lab/                         runs many seeded markets at once, one per worker
+tools/agent/                       an AI cheater: Claude searches for spoofing tactics the detector misses
 ```
 
 More on the threading model, the race handling and the tradeoffs is in [docs/architecture.md](docs/architecture.md).
@@ -520,6 +521,7 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | GET    | `/api/surveillance/alerts?detector=`    | A detector's alerts on the current market, with the event-log lines behind each |
 | GET    | `/api/surveillance/score?detector=`     | Those alerts graded against the answer key |
 | POST   | `/api/surveillance/evaluations`         | Start a job scoring every detector on a spoofed and a control market per seed |
+| POST   | `/api/surveillance/trials`              | Start a job running one market (with optional spoofer `tactics`) and return each detector's verdict on each spoofer |
 | GET    | `/api/jobs/{id}`                        | A job's status, and its result once it's done |
 | GET    | `/actuator/health`                      | Health check                               |
 

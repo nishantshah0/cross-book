@@ -7,6 +7,7 @@ import io.github.nishantshah0.papertrader.bots.BotKind;
 import io.github.nishantshah0.papertrader.bots.BotRunReport;
 import io.github.nishantshah0.papertrader.bots.BotRunRequest;
 import io.github.nishantshah0.papertrader.bots.BotRunner;
+import io.github.nishantshah0.papertrader.bots.SpoofTactics;
 import io.github.nishantshah0.papertrader.grading.Grader;
 import io.github.nishantshah0.papertrader.grading.Score;
 import io.github.nishantshah0.papertrader.surveillance.Surveillance;
@@ -194,6 +195,72 @@ class BotMarketTest extends ApiTestSupport {
                 .contains(BotKind.SPOOFER, BotKind.LOOKALIKE, BotKind.NOISE);
     }
 
+    // Tactics change how a scheme runs, not what it is. Here the real order goes first,
+    // then three fakes of 4% of cash each, 3 cents behind the best price and 2 cents
+    // apart, and every step is 4 to 5 seconds, so each fake lives one step. They are
+    // still labelled, and still pulled.
+    @Test
+    void tacticsChangeHowASpooferRunsAScheme() {
+        var tactics = new SpoofTactics(0.04, 3, 2, 0.01, true, 4_000, 5_000, 20_000);
+        BotRunReport report = runner.run(new BotRunRequest(21L, 40, NOISE, MAKERS, 10, VALUE, 2, 3, 2, SYMBOLS,
+                tactics));
+        assertThat(report.tactics()).isEqualTo(tactics);
+        record Labelled(long account, int episode, String role, long id, double value, String status,
+                double lifeSeconds) {
+        }
+        List<Labelled> orders = jdbc.query("""
+                select l.account_id, l.episode, l.role, o.id, o.quantity * o.limit_price, o.status,
+                       extract(epoch from o.updated_at - o.created_at)::float8
+                from answer_key_orders l join orders o on o.id = l.order_id
+                """, (row, n) -> new Labelled(row.getLong(1), row.getInt(2), row.getString(3), row.getLong(4),
+                row.getDouble(5), row.getString(6), row.getDouble(7)));
+        var episodes = orders.stream().collect(java.util.stream.Collectors.groupingBy(
+                o -> o.account() + "/" + o.episode()));
+        assertThat(episodes).hasSizeGreaterThan(5);
+        int realFirst = 0;
+        for (var episode : episodes.values()) {
+            var fakes = episode.stream().filter(o -> o.role().equals("SPOOF")).toList();
+            var real = episode.stream().filter(o -> o.role().equals("REAL")).toList();
+            assertThat(fakes).hasSizeLessThanOrEqualTo(3);
+            for (Labelled r : real) {
+                assertThat(fakes).allMatch(f -> f.id() > r.id());
+                realFirst++;
+            }
+        }
+        assertThat(realFirst).isGreaterThan(5);
+        var fakes = orders.stream().filter(o -> o.role().equals("SPOOF")).toList();
+        // 4% of $100,000, less where a fake ask ran short of shares
+        assertThat(fakes).allMatch(f -> f.value() <= 4_000 + 1_000);
+        assertThat(fakes).anyMatch(f -> f.value() > 3_000);
+        assertThat(fakes).filteredOn(f -> f.status().equals("CANCELLED"))
+                .allMatch(f -> f.lifeSeconds() >= 4 && f.lifeSeconds() <= 5.01);
+    }
+
+    // A trial runs one market and says, per spoofer, whether each detector flagged it and
+    // what the alert said, which is what a cheater searching for tactics gets back.
+    @Test
+    void aTrialReportsEachDetectorsVerdictOnEachSpoofer() throws Exception {
+        var result = post("/api/surveillance/trials", """
+                {"seed": 21, "ticks": 40, "noiseTraders": %d, "marketMakers": %d, "bookReaders": 10,
+                 "valueTraders": %d, "symbols": %s, "tactics": {"fakeSize": 0.06}}
+                """.formatted(NOISE, MAKERS, VALUE, json.writeValueAsString(SYMBOLS)));
+        assertThat(result).hasStatus(HttpStatus.ACCEPTED);
+        var trial = finished(result);
+        assertThat(trial.get("report").get("tactics").get("fakeSize").asDouble()).isEqualTo(0.06);
+        assertThat(trial.get("report").get("tactics").get("restMs").asInt()).isEqualTo(40_000);
+        assertThat(trial.get("scores").size()).isEqualTo(2);
+        var verdicts = trial.get("spoofers");
+        assertThat(verdicts.size()).isEqualTo(4); // two spoofers, two detectors
+        for (var verdict : verdicts) {
+            assertThat(verdict.get("bot").asString()).startsWith("spoofer-");
+            if (verdict.get("flagged").asBoolean()) {
+                assertThat(verdict.get("alert").asString()).isNotBlank();
+            }
+        }
+        assertThat(post("/api/surveillance/trials", "{\"seed\": 1, \"tactics\": {\"fakeSize\": 0.9}}"))
+                .hasStatus(HttpStatus.BAD_REQUEST);
+    }
+
     // A spoofer's starting stake (two stocks, a quarter of its cash in each) is a shape no
     // other honest kind has, and starting stakes are in the trade log. The lookalikes
     // share it, so an account's stake can at best halve the field: of the accounts that
@@ -318,7 +385,7 @@ class BotMarketTest extends ApiTestSupport {
     }
 
     private static BotRunReport withoutTiming(BotRunReport r) {
-        return new BotRunReport(r.seed(), r.ticks(), r.noiseTraders(), r.marketMakers(), r.bookReaders(), r.valueTraders(), r.spoofers(), r.spoofLayers(), r.lookalikes(), r.symbols(), r.startedAt(),
+        return new BotRunReport(r.seed(), r.ticks(), r.noiseTraders(), r.marketMakers(), r.bookReaders(), r.valueTraders(), r.spoofers(), r.spoofLayers(), r.lookalikes(), r.tactics(), r.symbols(), r.startedAt(),
                 r.endedAt(), r.actions(), r.ordersPlaced(), r.refused(), r.cancelled(), r.cancelsTooLate(),
                 r.trades(), r.prices(), r.kinds(), r.activity(), r.spoofing(), r.ledgerBalanced(), 0, 0);
     }

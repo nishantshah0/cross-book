@@ -1,5 +1,6 @@
 package io.github.nishantshah0.papertrader.grading;
 
+import io.github.nishantshah0.papertrader.bots.BotRunRequest;
 import io.github.nishantshah0.papertrader.bots.BotRunner;
 import io.github.nishantshah0.papertrader.jobs.Jobs;
 import io.github.nishantshah0.papertrader.surveillance.Surveillance;
@@ -51,6 +52,15 @@ class GradingController {
         runner.requireRunnable();
         Jobs.Job job = jobs.submit("evaluation",
                 () -> evaluation.evaluate(new Evaluation.Request(request.seeds(), request.ticks())));
+        return ResponseEntity.accepted().location(URI.create("/api/jobs/" + job.id())).body(job);
+    }
+
+    // One market, as a job, with every detector's verdict on each spoofer: the loop an
+    // adaptive cheater (tools/agent/) runs to test tactics against surveillance.
+    @PostMapping("/api/surveillance/trials")
+    ResponseEntity<Jobs.Job> trial(@Valid @RequestBody BotRunRequest request) {
+        runner.requireRunnable();
+        Jobs.Job job = jobs.submit("trial", () -> evaluation.trial(request));
         return ResponseEntity.accepted().location(URI.create("/api/jobs/" + job.id())).body(job);
     }
 }

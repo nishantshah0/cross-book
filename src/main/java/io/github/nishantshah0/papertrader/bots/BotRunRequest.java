@@ -1,5 +1,6 @@
 package io.github.nishantshah0.papertrader.bots;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -10,7 +11,8 @@ import java.util.List;
 // ticks), 100 noise traders, 8 market makers, 20 book readers, 10 value traders, 2
 // spoofers with 4 fake layers each and 2 lookalikes, on every symbol the feed quotes.
 // Set spoofers to 0 for a market with no cheaters, or spoofLayers to 0 for the control:
-// spoofers that place no fake orders, and so are honest.
+// spoofers that place no fake orders, and so are honest. tactics change how the
+// spoofers (and their lookalikes) run a scheme; see SpoofTactics.
 public record BotRunRequest(
         @NotNull Long seed,
         @Min(1) @Max(5_760) Integer ticks,
@@ -21,12 +23,20 @@ public record BotRunRequest(
         @Min(0) @Max(50) Integer spoofers,
         @Min(0) @Max(8) Integer spoofLayers,
         @Min(0) @Max(50) Integer lookalikes,
-        @Size(max = 50) List<String> symbols) {
+        @Size(max = 50) List<String> symbols,
+        @Valid SpoofTactics tactics) {
+
+    public BotRunRequest(Long seed, Integer ticks, Integer noiseTraders, Integer marketMakers, Integer bookReaders,
+            Integer valueTraders, Integer spoofers, Integer spoofLayers, Integer lookalikes, List<String> symbols) {
+        this(seed, ticks, noiseTraders, marketMakers, bookReaders, valueTraders, spoofers, spoofLayers, lookalikes,
+                symbols, null);
+    }
 
     public BotRunRequest withDefaults() {
         return new BotRunRequest(seed, or(ticks, 240), or(noiseTraders, 100), or(marketMakers, 8),
                 or(bookReaders, 20), or(valueTraders, 10), or(spoofers, 2),
-                or(spoofLayers, Spoofer.DEFAULT_LAYERS), or(lookalikes, 2), symbols == null ? List.of() : symbols);
+                or(spoofLayers, Spoofer.DEFAULT_LAYERS), or(lookalikes, 2), symbols == null ? List.of() : symbols,
+                (tactics == null ? SpoofTactics.DEFAULT : tactics).withDefaults());
     }
 
     private static int or(Integer value, int fallback) {

@@ -1,8 +1,11 @@
 package io.github.nishantshah0.papertrader.grading;
 
+import io.github.nishantshah0.papertrader.bots.AnswerKey;
+import io.github.nishantshah0.papertrader.bots.BotKind;
 import io.github.nishantshah0.papertrader.bots.BotRunReport;
 import io.github.nishantshah0.papertrader.bots.BotRunRequest;
 import io.github.nishantshah0.papertrader.bots.BotRunner;
+import io.github.nishantshah0.papertrader.surveillance.Alert;
 import io.github.nishantshah0.papertrader.surveillance.Detector;
 import io.github.nishantshah0.papertrader.surveillance.MarketLog;
 import io.github.nishantshah0.papertrader.surveillance.Surveillance;
@@ -33,14 +36,46 @@ public class Evaluation {
     public record Report(List<Long> seeds, int ticks, List<Total> totals, List<Run> runs, double seconds) {
     }
 
+    // One market and every detector's verdict on it, for a cheater searching for tactics
+    // that get past surveillance. spoofers says, per spoofer bot, whether each detector
+    // flagged it and what the alert said: what a cheater would learn from being charged.
+    public record Trial(BotRunReport report, List<Score> scores, List<SpooferVerdict> spoofers) {
+    }
+
+    public record SpooferVerdict(String bot, String detector, boolean flagged, String alert) {
+    }
+
     private final BotRunner runner;
     private final Surveillance surveillance;
     private final Grader grader;
+    private final AnswerKey answerKey;
 
-    Evaluation(BotRunner runner, Surveillance surveillance, Grader grader) {
+    Evaluation(BotRunner runner, Surveillance surveillance, Grader grader, AnswerKey answerKey) {
         this.runner = runner;
         this.surveillance = surveillance;
         this.grader = grader;
+        this.answerKey = answerKey;
+    }
+
+    public Trial trial(BotRunRequest request) {
+        BotRunReport report = runner.run(request);
+        MarketLog log = surveillance.log();
+        Map<Long, AnswerKey.Entry> spoofers = new LinkedHashMap<>();
+        answerKey.entries().stream().filter(e -> e.kind() == BotKind.SPOOFER)
+                .forEach(e -> spoofers.put(e.accountId(), e));
+        List<Score> scores = new ArrayList<>();
+        List<SpooferVerdict> verdicts = new ArrayList<>();
+        for (String name : surveillance.names()) {
+            List<Alert> alerts = surveillance.detector(name).scan(log);
+            scores.add(grader.grade(name, alerts));
+            Map<Long, Alert> byAccount = new LinkedHashMap<>();
+            alerts.forEach(a -> byAccount.put(a.accountId(), a));
+            spoofers.forEach((id, entry) -> {
+                Alert alert = byAccount.get(id);
+                verdicts.add(new SpooferVerdict(entry.bot(), name, alert != null, alert == null ? null : alert.summary()));
+            });
+        }
+        return new Trial(report, scores, verdicts);
     }
 
     public Report evaluate(Request request) {
@@ -59,7 +94,7 @@ public class Evaluation {
                     scores.add(grader.grade(name, detector.scan(log)));
                 }
                 var spoofers = report.kinds().stream()
-                        .filter(k -> k.kind() == io.github.nishantshah0.papertrader.bots.BotKind.SPOOFER)
+                        .filter(k -> k.kind() == BotKind.SPOOFER)
                         .findFirst().orElse(null);
                 runs.add(new Run(seed, market, spoofers, scores));
             }

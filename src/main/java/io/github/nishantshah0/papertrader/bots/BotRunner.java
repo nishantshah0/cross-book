@@ -136,10 +136,10 @@ public class BotRunner {
             roster.add(new ValueTrader(i, run.seed(), covers(i, run.valueTraders(), symbols)));
         }
         for (int i = 0; i < run.spoofers(); i++) {
-            roster.add(new Spoofer(i, run.seed(), run.spoofLayers()));
+            roster.add(new Spoofer(i, run.seed(), run.spoofLayers(), run.tactics()));
         }
         for (int i = 0; i < run.lookalikes(); i++) {
-            roster.add(Spoofer.lookalike(i, run.seed()));
+            roster.add(Spoofer.lookalike(i, run.seed(), run.tactics()));
         }
         return roster;
     }
@@ -213,7 +213,7 @@ public class BotRunner {
         }
         long trades = prices.stream().mapToLong(BotRunReport.SymbolSummary::trades).sum();
         return new BotRunReport(run.seed(), run.ticks(), run.noiseTraders(), run.marketMakers(), run.bookReaders(),
-                run.valueTraders(), run.spoofers(), run.spoofLayers(), run.lookalikes(), symbols, start, simulation.status().now(), market.actions, market.placed,
+                run.valueTraders(), run.spoofers(), run.spoofLayers(), run.lookalikes(), run.tactics(), symbols, start, simulation.status().now(), market.actions, market.placed,
                 market.refused, market.cancelled, market.cancelsTooLate, trades, prices, kinds(), activity(start), spoofing(),
                 ledger.run().balanced(), Math.round(seconds * 100) / 100.0, Math.round(market.actions / seconds));
     }

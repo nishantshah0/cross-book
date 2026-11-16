@@ -16,6 +16,7 @@ public record BotRunReport(
         int spoofers,
         int spoofLayers,
         int lookalikes,
+        SpoofTactics tactics,
         List<String> symbols,
         Instant startedAt,
         Instant endedAt,

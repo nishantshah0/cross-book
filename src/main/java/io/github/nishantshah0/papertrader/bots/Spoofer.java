@@ -15,6 +15,8 @@ import java.util.List;
 //   2. execute: a small real order on the other side, one cent inside the spread
 //   3. unwind:  cancel the fakes, and the real order too if it is still open
 //
+// SpoofTactics changes the sizes, prices and timing, and can swap steps 1 and 2.
+//
 // It then rests for a while before the next episode. To sell, it fakes demand (bids);
 // to buy back, it fakes supply (asks), choosing by whether it holds more or less than
 // it started with, so it does not just run out of stock. It works two stocks, chosen
@@ -27,17 +29,14 @@ import java.util.List;
 // stocks, a quarter of its cash in each) does not give it away.
 final class Spoofer extends Bot {
 
-    static final double REST_GAP_MS = 40_000;
-    // between the steps of a scheme, so each fake order lives 2 to 6 seconds
-    static final long STEP_MIN_MS = 1_000, STEP_MAX_MS = 3_000;
     static final int DEFAULT_LAYERS = 4;
-    private static final double LAYER_SIZE = 0.08;     // each fake order, as a share of its cash
-    private static final double REAL_SIZE = 0.02;      // the real order
     private static final double STARTING_STAKE = 0.50; // share of its cash it starts holding as stock
 
-    private enum Step { REST, LAYERED, EXECUTING }
+    // REST, then the scheme's two placing steps (fakes then real, or real then fakes), then unwind
+    private enum Step { REST, FIRST, SECOND }
 
     private final int layers;
+    private final SpoofTactics tactics;
     private final List<String> works = new ArrayList<>(2);
     private final List<Long> fakes = new ArrayList<>();
     private Step step = Step.REST;
@@ -47,17 +46,26 @@ final class Spoofer extends Bot {
     private int episode;
 
     Spoofer(int ordinal, long runSeed, int layers) {
-        this(BotKind.SPOOFER, ordinal, runSeed, layers);
+        this(ordinal, runSeed, layers, SpoofTactics.DEFAULT);
+    }
+
+    Spoofer(int ordinal, long runSeed, int layers, SpoofTactics tactics) {
+        this(BotKind.SPOOFER, ordinal, runSeed, layers, tactics);
     }
 
     // a lookalike: the spoofer's twin with nothing fake
     static Spoofer lookalike(int ordinal, long runSeed) {
-        return new Spoofer(BotKind.LOOKALIKE, ordinal, runSeed, 0);
+        return lookalike(ordinal, runSeed, SpoofTactics.DEFAULT);
     }
 
-    private Spoofer(BotKind kind, int ordinal, long runSeed, int layers) {
-        super(kind, ordinal, runSeed, REST_GAP_MS);
+    static Spoofer lookalike(int ordinal, long runSeed, SpoofTactics tactics) {
+        return new Spoofer(BotKind.LOOKALIKE, ordinal, runSeed, 0, tactics);
+    }
+
+    private Spoofer(BotKind kind, int ordinal, long runSeed, int layers, SpoofTactics tactics) {
+        super(kind, ordinal, runSeed, tactics.withDefaults().restMs());
         this.layers = layers;
+        this.tactics = tactics.withDefaults();
     }
 
     @Override
@@ -67,7 +75,7 @@ final class Spoofer extends Bot {
 
     @Override
     long nextGapMs() {
-        return step == Step.REST ? gap(REST_GAP_MS) : gapBetween(STEP_MIN_MS, STEP_MAX_MS);
+        return step == Step.REST ? gap(tactics.restMs()) : gapBetween(tactics.stepMinMs(), tactics.stepMaxMs());
     }
 
     @Override
@@ -82,30 +90,54 @@ final class Spoofer extends Bot {
     @Override
     void act(BotMarket market) {
         switch (step) {
-            case REST -> layer(market);
-            case LAYERED -> execute(market);
-            case EXECUTING -> unwind(market);
+            case REST -> begin(market);
+            case FIRST -> {
+                if (tactics.realFirst()) {
+                    layer(market);
+                } else {
+                    execute(market);
+                }
+                step = Step.SECOND;
+            }
+            case SECOND -> unwind(market);
         }
     }
 
-    private void layer(BotMarket market) {
+    // picks the stock and the side, then takes the scheme's first step
+    private void begin(BotMarket market) {
         symbol = works.get(random.nextInt(works.size()));
-        var bid = market.bestBid(symbol);
-        var ask = market.bestAsk(symbol);
-        if (bid.isEmpty() || ask.isEmpty()) {
+        if (market.bestBid(symbol).isEmpty() || market.bestAsk(symbol).isEmpty()) {
             return; // no book to play with; try again after a rest
         }
         int held = market.shares(accountId, symbol);
         fakeSide = held > stake.get(symbol) ? OrderSide.BUY : OrderSide.SELL;
+        episode++;
+        if (tactics.realFirst()) {
+            execute(market);
+            step = Step.FIRST;
+        } else {
+            layer(market);
+            // a spoofer whose fakes all failed has nothing to play with; the control has none to begin with
+            step = fakes.isEmpty() && layers > 0 ? Step.REST : Step.FIRST;
+        }
+    }
+
+    private void layer(BotMarket market) {
+        var bid = market.bestBid(symbol);
+        var ask = market.bestAsk(symbol);
+        if (bid.isEmpty() || ask.isEmpty()) {
+            return;
+        }
+        int held = market.shares(accountId, symbol);
         BigDecimal touch = fakeSide == OrderSide.BUY ? bid.get() : ask.get();
         double price = touch.doubleValue();
-        int size = Math.max(1, (int) (market.startingCash.doubleValue() * LAYER_SIZE / price));
-        episode++;
+        int size = Math.max(1, (int) (market.startingCash.doubleValue() * tactics.fakeSize() / price));
         int free = held; // fake asks need shares behind them, like any sell
-        for (int i = 1; i <= layers; i++) {
-            // a cent apart, starting a cent behind the best price, so they sit near the
-            // top of the book but are not the first thing a seller would hit
-            BigDecimal at = fakeSide == OrderSide.BUY ? touch.subtract(cents(i)) : touch.add(cents(i));
+        for (int i = 0; i < layers; i++) {
+            // by default a cent apart, starting a cent behind the best price, so they sit
+            // near the top of the book but are not the first thing a seller would hit
+            BigDecimal away = cents(tactics.fakeOffsetCents() + i * tactics.fakeGapCents());
+            BigDecimal at = fakeSide == OrderSide.BUY ? touch.subtract(away) : touch.add(away);
             int shares = fakeSide == OrderSide.SELL ? Math.min(size, free) : size;
             if (shares <= 0 || at.signum() <= 0) {
                 break;
@@ -118,7 +150,6 @@ final class Spoofer extends Bot {
                 market.label(this, order, episode, "SPOOF");
             });
         }
-        step = fakes.isEmpty() && layers > 0 ? Step.REST : Step.LAYERED;
     }
 
     private void execute(BotMarket market) {
@@ -131,7 +162,7 @@ final class Spoofer extends Bot {
             BigDecimal price = realSide == OrderSide.SELL
                     ? ask.get().subtract(one).max(bid.get().add(one))
                     : bid.get().add(one).min(ask.get().subtract(one));
-            int shares = Math.max(1, (int) (market.startingCash.doubleValue() * REAL_SIZE / price.doubleValue()));
+            int shares = Math.max(1, (int) (market.startingCash.doubleValue() * tactics.realSize() / price.doubleValue()));
             if (realSide == OrderSide.SELL) {
                 shares = Math.min(shares, market.shares(accountId, symbol));
             }
@@ -144,7 +175,6 @@ final class Spoofer extends Bot {
                 });
             }
         }
-        step = Step.EXECUTING;
     }
 
     private void unwind(BotMarket market) {
