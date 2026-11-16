@@ -26,18 +26,20 @@ class BotRunOnStart {
             @Value("${papertrader.bots.market-makers:8}") int marketMakers,
             @Value("${papertrader.bots.book-readers:20}") int bookReaders,
             @Value("${papertrader.bots.value-traders:10}") int valueTraders,
-            @Value("${papertrader.bots.spoofers:2}") int spoofers) {
+            @Value("${papertrader.bots.spoofers:2}") int spoofers,
+            @Value("${papertrader.bots.lookalikes:2}") int lookalikes) {
         this.runner = runner;
         this.request = new BotRunRequest(seed, ticks, noiseTraders, marketMakers, bookReaders, valueTraders, spoofers,
-                null, List.of());
+                null, lookalikes, List.of());
     }
 
     @EventListener(ApplicationReadyEvent.class)
     void start() {
         Thread.ofPlatform().name("bot-run").start(() -> {
             log.info("Bot market: seed {}, {} ticks, {} noise traders, {} market makers, {} book readers, "
-                    + "{} value traders, {} spoofers", request.seed(), request.ticks(), request.noiseTraders(),
-                    request.marketMakers(), request.bookReaders(), request.valueTraders(), request.spoofers());
+                    + "{} value traders, {} spoofers, {} lookalikes", request.seed(), request.ticks(),
+                    request.noiseTraders(), request.marketMakers(), request.bookReaders(), request.valueTraders(),
+                    request.spoofers(), request.lookalikes());
             try {
                 BotRunReport report = runner.run(request);
                 log.info("Bot market done in {}s ({} actions/s): {} actions, {} orders, {} refused, {} cancels, "

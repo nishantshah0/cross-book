@@ -3,7 +3,7 @@
 # CrossBook
 
 **A stock exchange engine with a bot market and planted cheaters, for testing market surveillance.**<br>
-Run 140 simulated traders, spoofers included, and replay the market to the millisecond, or trade in it yourself from a full terminal. No real money involved.
+Run 142 simulated traders, spoofers included, and replay the market to the millisecond, or trade in it yourself from a full terminal. No real money involved.
 
 [![Build and test](https://github.com/nishantshah0/cross-book/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nishantshah0/cross-book/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -26,8 +26,8 @@ Run 140 simulated traders, spoofers included, and replay the market to the milli
 - **A simulated market maker.** The house quotes a bid and an ask around the feed price, so a market order always has something to trade with, even if you're the only user.
 - **One matcher thread per symbol.** Symbols match in parallel and nothing within a symbol interleaves. Postgres stays the source of truth.
 - **Books that always balance.** The house keeps its own books, so every dollar and share a user gains, the house gives up. A ledger audit proves nothing was created or destroyed, and it runs after every integration test.
-- **Surveillance that's graded honestly.** A rule-based spoofing detector caught 10 of 10 spoofers on five unseen seeds with no false alarms across 1,390 honest accounts, against a cancel-ratio baseline that raised 85. Every alert cites the event-log lines behind it.
-- **A bot market with a planted cheater.** One command runs 140 simulated traders for an hour of market time in about a minute, including spoofers whose fake orders measurably pay off against an honest control. The same seed gives the same market down to the millisecond, and only a separate answer key says who cheated, order by order.
+- **Surveillance that's graded honestly.** A rule-based spoofing detector caught 10 of 10 spoofers on five unseen seeds with no false alarms across 1,410 honest accounts, against a cancel-ratio baseline that raised 107. Every alert cites the event-log lines behind it.
+- **A bot market with a planted cheater.** One command runs 142 simulated traders for an hour of market time in about a minute, spoofers included. Over 30 seeds against an honest control, the fake orders got the spoofer's real orders traded on every seed (2.5 times the shares), though a profit isn't proven yet. The same seed gives the same market down to the millisecond, and only a separate answer key says who cheated, order by order.
 - **A complete audit trail.** Every order event (placed, partly filled, filled, cancelled, rejected) is logged with a sequence number in the same transaction as the change, so the log never disagrees with the books.
 - **Safe under concurrency.** Accounts are locked in ID order so trades can't deadlock, the book changes only after the transaction commits, and retries with an `Idempotency-Key` never place the same order twice.
 - **A full trading terminal.** Everything on one screen: a searchable watchlist, a chart with a crosshair and time ranges, an order book ladder you can click to set a limit price, the order ticket, positions and order history, and a leaderboard.
@@ -125,30 +125,38 @@ One command runs a whole market of simulated traders, in book mode on the simula
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=bots   # wipes the local database first
 ```
 
-It resets the exchange, runs 140 bots across all twelve stocks for an hour of market time, logs a report, and leaves the app up so you can browse the result. `BOT_SEED`, `BOT_TICKS`, `BOT_NOISE_TRADERS`, `BOT_MARKET_MAKERS`, `BOT_BOOK_READERS`, `BOT_VALUE_TRADERS` and `BOT_SPOOFERS` change the run, and `POST /api/bots/runs` starts one from a running app.
+It resets the exchange, runs 142 bots across all twelve stocks for an hour of market time, logs a report, and leaves the app up so you can browse the result. `BOT_SEED`, `BOT_TICKS`, `BOT_NOISE_TRADERS`, `BOT_MARKET_MAKERS`, `BOT_BOOK_READERS`, `BOT_VALUE_TRADERS`, `BOT_SPOOFERS` and `BOT_LOOKALIKES` change the run. From a running app, `POST /api/bots/runs` starts one as a job: it answers `202` with a job id at once, and `GET /api/jobs/{id}` has the report when the run is over.
 
 | Bots | Kind | Sees | Does |
 | ---: | --- | --- | --- |
 | 100 | Noise trader | the book | Buys or sells at random, sometimes at market, sometimes with a limit a little off the middle |
 | 8 | Market maker | the feed | Quotes a bid and an ask in a few stocks around the feed price, leaning against its inventory |
 | 20 | Book reader | the book | Trades in the direction of the most lopsided book: lots of resting bids means buy |
-| 10 | Value trader | the feed | Trades a stock back towards its feed price when the book drifts more than 15 bps away |
+| 10 | Value trader | the feed | Trades a stock back towards its feed price when the book drifts more than 15 bps away, and cancels whatever doesn't fill at once |
 | 2 | **Spoofer** (cheater) | the book | Stacks large fake orders on one side, trades a small real order on the other, then cancels the fakes |
+| 2 | Lookalike | the book | The spoofer's honest twin: same starting stake, same timing, same real orders, no fakes |
 
 The feed price stands in for a stock's true value, and only makers and value traders see it. Every honest bot has a position limit: it can sell down to zero or buy up to twice what it started with.
 
 #### Does the spoofing work?
 
-A spoofer is only worth catching if it actually profits from its fake orders. So each spoofed run is paired with a **control**: the same seed and the same bot, with the same timing and the same real orders, but zero fake layers (`"spoofLayers": 0`). The control places no fake orders, so it's honest. Over three seeds, an hour of market time each:
+A spoofer is only worth catching if its fake orders actually do something. So each spoofed run is paired with a **control**: the same seed and the same bot, with the same timing and the same real orders, but zero fake layers (`"spoofLayers": 0`). The control places no fake orders, so it's honest. Over 30 seeds (201 to 230), an hour of market time each, with both spoofers' numbers added together:
 
-| Seed | Real orders that filled | | Shares traded | | Trading P&L | |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| | spoofer | control | spoofer | control | spoofer | control |
-| 1 | 45% | 20% | 434 | 164 | +$41 | −$40 |
-| 2 | 34% | 24% | 245 | 102 | +$102 | +$30 |
-| 3 | 48% | 20% | 319 | 116 | +$57 | −$44 |
+| | With fakes | Control | Difference, 95% CI | Seeds where fakes helped |
+| --- | ---: | ---: | ---: | ---: |
+| Real orders that traded | 35% | 19% | **+16 points** (+13 to +19) | **30 of 30** |
+| Shares the real orders traded | 283 | 113 | **+170** (+131 to +209) | **30 of 30** |
+| Spoofer trading P&L | +$37 | −$13 | +$50 (−$15 to +$115) | 18 of 30 |
+| Book readers' P&L, all 20 | −$1,346 | −$1,180 | −$166 (−$562 to +$230) | 17 of 30 |
+| Worst stock vs its feed | 75 bps | 73 bps | +2 bps (−33 to +37) | – |
 
-In every seed the fake orders more than double the shares the spoofer trades (2.4 to 2.8 times) and lift how often its real order fills, from about 1 in 5 to as much as 1 in 2. They turn a small loss into a small, steady profit. That profit comes from the book readers, who see the fake demand and buy from the spoofer. The amounts are small (about $33 a spoofer per hour, on $100,000), which matches real spoofing cases, where the edge was about a tick per trade. In seed 3 it also did damage: the spoofer's flow drained one stock's market makers, and TSLA ended 2.1% above its feed price. The same seed without spoofers keeps every stock within 43 bps.
+The confidence intervals are paired t intervals over the 30 seeds.
+
+What the fakes clearly do is get the spoofer's real orders traded. On every one of the 30 seeds the real orders filled more often, and they traded 2.5 times the shares on average (from 1.2 to 5.9 times, depending on the seed). The fakes make the book look heavy on one side, and the book readers trade into the spoofer's real order.
+
+What they don't clearly do, yet, is make money. The spoofer made $50 more an hour on average, but that's on $200,000 of starting cash, and the interval includes zero: in 12 of the 30 seeds it did no better than its honest twin. The book readers' extra losses and the effect on prices are just as unclear. Real spoofing cases match this: the edge was about a tick a trade, made back over thousands of trades. So a longer run might show it, but these runs don't. To check, run `python3 tools/lab/lab.py spoof-pairs --seeds 201-230` (about 50 minutes with 6 workers).
+
+Honest markets aren't tight either. The worst stock in a control market ended 73 bps from its feed on average and once 3.0%, so the 30 seeds include markets where an honest stock wandered as far as a manipulated one.
 
 #### What a run looks like
 
@@ -156,12 +164,12 @@ The default market with the spoofers, seed 1, on an Apple M3 laptop with a fresh
 
 | | |
 | --- | --- |
-| Wall time | 68 seconds for an hour of market time, about 715 actions a second |
-| Actions | 48,885 |
-| Trades between bots | 12,462 |
+| Wall time | 65 seconds for an hour of market time, about 756 actions a second |
+| Actions | 49,240 |
+| Trades between bots | 12,268 |
 | Refused orders | 12 |
-| Last trade vs feed price | within 33 bps for every stock |
-| Spoofing episodes | 157, with 578 fake orders, each pulled 2 to 6 seconds after it was placed |
+| Last trade vs feed price | within 39 bps for every stock |
+| Spoofing episodes | 155, with 570 fake orders, each pulled 2 to 6 seconds after it was placed |
 | Ledger | balanced |
 
 The bots call the order service directly rather than going over HTTP, so their orders are checked, matched, logged and audited like anyone's.
@@ -172,7 +180,7 @@ The bots call the order service directly rather than going over HTTP, so their o
 - **Bots don't share random numbers.** Each bot has its own random streams, seeded from the run's seed and the bot's name: one for when it wakes and one for what it does. Rerunning a market without one bot leaves every other bot's schedule exactly as it was, so the difference is that bot's effect.
 - **Bots act through each tick.** Each bot wakes at random intervals, and the clock moves to each wake, so the event log has realistic timing between orders and cancels.
 - **Only the answer key says who is who.** Accounts are named `trader_0001` and up, opened in an order shuffled by the seed, so neither the name nor the id gives a bot away. `answer_key` records each account's bot and whether it cheats. `answer_key_orders` labels every order a spoofer placed as `SPOOF` or `REAL`, by episode, so a detector can be graded on exact orders. A detector reads only the market data.
-- **There's a hard negative built in.** The control spoofer trades just like the spoofer minus the fakes. A detector that flags it is flagging timing, not spoofing.
+- **Nothing but the spoofing gives a spoofer away.** A spoofer starts with two stocks at a quarter of its cash each, a shape no honest kind had, and starting stakes are in the trade log. So every market also has lookalikes, honest twins with the same stake, timing and real orders but no fakes. Of the accounts that start like a spoofer, half are honest, and a test checks it. A detector that flags lookalikes is flagging how the spoofer trades, not the spoofing. (An outside review found this leak.)
 
 #### Bugs the measurements caught
 
@@ -200,16 +208,17 @@ The rules' thresholds were set on seeds 1 to 3 and then frozen. Scored on five s
 
 | Detector | Spoofers caught | False alarms | Precision | Fake orders found |
 | --- | ---: | ---: | ---: | ---: |
-| **Spoofing rules** | **10 / 10** | **0** | **100%** | **88%** (2,319 of 2,645, none wrong) |
-| Cancel-ratio baseline | 10 / 10 | 85 | 11% | – |
+| **Spoofing rules** | **10 / 10** | **0** | **100%** | **87%** (2,278 of 2,617, none wrong) |
+| Cancel-ratio baseline | 10 / 10 | 107 | 9% | – |
 
-The baseline's 85 false alarms are 75 honest market makers, which re-quote all day, and all 10 control spoofers, which trade exactly like the spoofers minus the fakes. The rules flagged none of the 1,390 honest accounts across the ten markets, the control spoofers included. On seed 101 they missed 81 fakes. 58 were less than 3 times the real order, usually a spoofer's last fake ask, cut short when it ran low on shares. 14 came from schemes where no real order was placed, and 9 got a quarter or more filled before the cancel. An account is still caught by its other episodes, so these only cost order-level recall.
+The baseline's 107 false alarms are 77 honest market makers, which re-quote all day, and all 30 lookalikes and control spoofers, which run the spoofer's code with the fakes turned off. The rules flagged none of the 1,410 honest accounts across the ten markets, the lookalikes and control spoofers included. On seed 101 they missed 47 fakes. 27 were less than 3 times the real order, usually a spoofer's last fake ask, cut short when it ran low on shares. 12 got a quarter or more filled before the cancel, and 8 came from schemes where no real order was placed. An account is still caught by its other episodes, so these only cost order-level recall.
 
 What this doesn't show yet: the rules were written knowing what this spoofer does. Held-out seeds test whether they hold up in different markets, not against a cheater who changes how it spoofs. That's the next step: a cheater that adapts to the detector.
 
 ```bash
 curl -X POST localhost:8080/api/surveillance/evaluations -H 'Content-Type: application/json' \
-  -d '{"seeds": [101, 102, 103, 104, 105]}'                  # about 12 minutes; resets the exchange
+  -d '{"seeds": [101, 102, 103, 104, 105]}'                  # a job: about 12 minutes; resets the exchange
+curl localhost:8080/api/jobs/1                                          # its status, then its report
 curl 'localhost:8080/api/surveillance/alerts?detector=spoofing-rules'   # on the market as it stands
 curl 'localhost:8080/api/surveillance/score?detector=spoofing-rules'    # the same, graded
 ```
@@ -361,6 +370,7 @@ src/main/java/.../papertrader/
 ├── bots/         the bot runner, the honest bots, the spoofer and the answer key
 ├── surveillance/ the detectors, which read only the event log
 ├── grading/      scoring alerts against the answer key, and multi-seed evaluations
+├── jobs/         long work (bot runs, evaluations) off the request thread
 ├── ledger/       the ledger audit
 ├── portfolio/    portfolio valuation, P&L and the leaderboard
 ├── quote/        price feed, quote cache and history
@@ -373,6 +383,7 @@ frontend/cypress/                  Cypress buying-power tests
 docs/architecture.md               design notes and tradeoffs
 docs/performance.md                load test results and bottleneck analysis
 tools/loadtest/                    the load generator
+tools/lab/                         runs many seeded markets at once, one per worker
 ```
 
 More on the threading model, the race handling and the tradeoffs is in [docs/architecture.md](docs/architecture.md).
@@ -502,13 +513,14 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | POST   | `/api/simulation/ticks?count=`          | Advance a simulated clock by whole ticks   |
 | POST   | `/api/simulation/advance?millis=`       | Move a simulated clock within the current tick |
 | POST   | `/api/simulation/allocations?accountId=&symbol=&shares=` | Sell an account starting shares at the feed price (simulated clock only) |
-| POST   | `/api/bots/runs`                        | Run a whole bot market (book mode, simulated clock); returns the report |
+| POST   | `/api/bots/runs`                        | Start a whole bot market as a job (book mode, simulated clock); `202` with the job |
 | GET    | `/api/bots/answer-key`                  | Which account is which bot, for grading     |
 | GET    | `/api/bots/answer-key/orders`           | Every spoofer order, labelled `SPOOF` or `REAL` by episode |
 | GET    | `/api/surveillance/detectors`           | The detectors                              |
 | GET    | `/api/surveillance/alerts?detector=`    | A detector's alerts on the current market, with the event-log lines behind each |
 | GET    | `/api/surveillance/score?detector=`     | Those alerts graded against the answer key |
-| POST   | `/api/surveillance/evaluations`         | Score every detector on a spoofed and a control market per seed |
+| POST   | `/api/surveillance/evaluations`         | Start a job scoring every detector on a spoofed and a control market per seed |
+| GET    | `/api/jobs/{id}`                        | A job's status, and its result once it's done |
 | GET    | `/actuator/health`                      | Health check                               |
 
 <details>

@@ -51,7 +51,7 @@ public class Evaluation {
             for (String market : List.of("spoofers", "control")) {
                 int layers = market.equals("spoofers") ? 4 : 0;
                 BotRunReport report = runner.run(new BotRunRequest(seed, ticks, null, null, null, null, null, layers,
-                        null));
+                        null, null));
                 MarketLog log = surveillance.log();
                 List<Score> scores = new ArrayList<>();
                 for (String name : surveillance.names()) {

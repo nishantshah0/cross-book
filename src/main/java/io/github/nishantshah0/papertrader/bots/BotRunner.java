@@ -65,12 +65,22 @@ public class BotRunner {
         this.properties = properties;
     }
 
-    public synchronized BotRunReport run(BotRunRequest request) {
-        BotRunRequest run = request.withDefaults();
+    // Refuses at once, before anything is touched, unless a run could go ahead: it needs
+    // book mode, where bots trade only with each other, and the simulated clock.
+    public void requireRunnable() {
         if (engine.mode() != MarketMode.BOOK) {
             throw new BotRunException("bot markets need book mode, where bots trade only with each other; "
                     + "start the app with papertrader.market.mode=book");
         }
+        if (!simulation.status().clock().equals("simulated")) {
+            throw new BotRunException("bot markets need the simulated clock, so a run can be replayed; "
+                    + "start the app with papertrader.clock.mode=simulated");
+        }
+    }
+
+    public synchronized BotRunReport run(BotRunRequest request) {
+        BotRunRequest run = request.withDefaults();
+        requireRunnable();
         List<String> symbols = symbols(run.symbols());
         simulation.reset(run.seed()); // refuses unless the clock is simulated
         long started = System.nanoTime();
@@ -127,6 +137,9 @@ public class BotRunner {
         }
         for (int i = 0; i < run.spoofers(); i++) {
             roster.add(new Spoofer(i, run.seed(), run.spoofLayers()));
+        }
+        for (int i = 0; i < run.lookalikes(); i++) {
+            roster.add(Spoofer.lookalike(i, run.seed()));
         }
         return roster;
     }
@@ -200,9 +213,34 @@ public class BotRunner {
         }
         long trades = prices.stream().mapToLong(BotRunReport.SymbolSummary::trades).sum();
         return new BotRunReport(run.seed(), run.ticks(), run.noiseTraders(), run.marketMakers(), run.bookReaders(),
-                run.valueTraders(), run.spoofers(), run.spoofLayers(), symbols, start, simulation.status().now(), market.actions, market.placed,
-                market.refused, market.cancelled, market.cancelsTooLate, trades, prices, kinds(),
+                run.valueTraders(), run.spoofers(), run.spoofLayers(), run.lookalikes(), symbols, start, simulation.status().now(), market.actions, market.placed,
+                market.refused, market.cancelled, market.cancelsTooLate, trades, prices, kinds(), activity(start), spoofing(),
                 ledger.run().balanced(), Math.round(seconds * 100) / 100.0, Math.round(market.actions / seconds));
+    }
+
+    private List<BotRunReport.KindActivity> activity(Instant start) {
+        return jdbc.query("""
+                select k.kind, count(*) as orders, count(*) filter (where o.filled_quantity > 0) as filled,
+                       coalesce(sum(o.filled_quantity), 0) as shares
+                from orders o join answer_key k on k.account_id = o.account_id
+                where o.created_at > ?::timestamptz
+                group by k.kind order by k.kind
+                """, (row, n) -> new BotRunReport.KindActivity(BotKind.valueOf(row.getString("kind")),
+                row.getLong("orders"), row.getLong("filled"), row.getLong("shares")), start.toString());
+    }
+
+    private BotRunReport.Spoofing spoofing() {
+        return jdbc.queryForObject("""
+                select count(distinct (l.account_id, l.episode)) as episodes,
+                       count(*) filter (where l.role = 'SPOOF') as fakes,
+                       count(*) filter (where l.role = 'SPOOF' and o.filled_quantity > 0) as fakes_filled,
+                       count(*) filter (where l.role = 'REAL') as reals,
+                       count(*) filter (where l.role = 'REAL' and o.filled_quantity > 0) as reals_filled,
+                       coalesce(sum(o.filled_quantity) filter (where l.role = 'REAL'), 0) as real_shares
+                from answer_key_orders l join orders o on o.id = l.order_id
+                """, (row, n) -> row.getLong("episodes") == 0 ? null : new BotRunReport.Spoofing(
+                row.getLong("episodes"), row.getLong("fakes"), row.getLong("fakes_filled"), row.getLong("reals"),
+                row.getLong("reals_filled"), row.getLong("real_shares")));
     }
 
     // Trading P&L by kind, at the feed price: the end value of each account, less the end

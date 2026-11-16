@@ -134,9 +134,9 @@ Migration V6 rebuilds the log for orders placed before it existed, from their cr
 
 ### Waiting, timing out and reading
 
-A request waits up to `papertrader.engine.timeout-ms` (10 seconds) for its task. If the task is still queued when the wait runs out, it is abandoned before it starts and the client gets a 503: so a 503 always means nothing happened, and the request is safe to retry. If the task has already started, it is inside its transaction and will finish, so the request waits for its real result instead of reporting a failure that may not be true. `Future.cancel` cannot tell those two cases apart (it reports success on a running task too), so the task and the waiting caller race to move a shared flag out of "queued": the task runs only if it wins, and the caller returns 503 only if it does.
+A request waits up to `papertrader.engine.timeout-ms` (10 seconds) for its task. If the task is still queued when the wait runs out, it is abandoned before it starts and the client gets a 503: so a 503 always means nothing happened, and the request is safe to retry. If the task has already started, it is inside its transaction and will finish, so the request waits for its real result instead of reporting a failure that may not be true. `Future.cancel` cannot tell those two cases apart (it reports success on a running task too), so the task and the waiting caller race to move a shared flag out of "queued": the task runs only if it wins, and the caller returns 503 only if it does. A caller interrupted while it waits plays the same race: it answers 503 only if it claimed the task first, and otherwise waits out the real result and keeps its interrupt flag set.
 
-Reads never queue. After every change, each matcher publishes an immutable snapshot of its book, the house's quote and its lean, and `GET /api/book`, the house price for a size and the lean all read the latest one. The book on screen can be one change behind the matcher, never torn.
+Reads never queue. After every change, each matcher publishes an immutable snapshot of its book, the house's quote and its lean, and `GET /api/book`, the house price for a size and the lean all read the latest one. The book on screen can be one change behind the matcher, never torn. A snapshot refreshes only when the book changes, though, and a feed can go stale with nothing changing (a provider outage leaves no event). So a reader checks the quote under the snapshot: if it's no longer tradable, the house is left out of the view, just as orders would find it.
 
 ## Safe retries
 
@@ -193,8 +193,11 @@ A simulated clock refuses live quotes, which have their own timestamps.
 | Book reader | the book | Trades at market in the direction of the most lopsided book, when it is lopsided enough |
 | Value trader | the feed | Trades a stock back towards its feed price when the book drifts more than 15 bps away |
 | Spoofer | the book | Layers fake orders on one side, trades a small real order on the other, then pulls everything |
+| Lookalike | the book | The spoofer's code with no fake layers: honest, with the spoofer's stake and timing |
 
-Makers and value traders each follow a run of consecutive symbols, about two of each per symbol. The feed price stands in for value; only the makers and value traders get to see it.
+Makers and value traders each follow a run of consecutive symbols, about two of each per symbol. The feed price stands in for value; only the makers and value traders get to see it. A value trader's order is a limit at the feed price, and whatever doesn't fill is cancelled at the same instant, as an immediate-or-cancel order would be. Left resting, it would sit at a stale price as the feed moved and get picked off.
+
+**Lookalikes.** Every kind starts with its own stake shape, and starting stakes are allocation trades in the log. A spoofer's (two stocks, a quarter of its cash in each) was unique, so a detector could have found spoofers from their holdings without looking at any behaviour. Lookalikes close that: they run the spoofer's code with zero layers, so they share its stake, schedule and real orders, and they're honest. Only cheaters label orders in `answer_key_orders`, so a lookalike's orders carry no label. An outside review of the code found the leak.
 
 **Position limits.** Every honest bot can sell down to nothing and buy up to twice the shares it started with. The limit has to be the same both ways. Without the buying half, a bot with plenty of cash but only a few shares of an expensive stock can soon only buy it, and the price drifts up: a measured run had COST end 5.5% above its feed, with the makers and value traders holding none of it and the book readers holding 304 shares. The same mistake appeared earlier in a smaller form, when a noise trader that couldn't sell bought instead (4.7% drift). In both cases the fix was to do nothing at the limit rather than trade the other way.
 
@@ -221,6 +224,10 @@ Detectors live in `surveillance/` and see a `MarketLog`: every order rebuilt fro
 **The rules' first version missed every spoofer.** It compared an order's size with the stock's median limit order. But market makers place most of the limit orders, so their quote size set the median, and the spoofer's fakes were only about twice that. The fix follows the definition of spoofing more closely: compare the fake with the same trader's own order on the other side. That holds whatever else is in the market. The thresholds were set on seeds 1 to 3, then frozen and scored on 101 to 105.
 
 **Why the market makers aren't caught.** They also place large orders and cancel nearly all of them within seconds, which is exactly why the cancel-ratio baseline flags them. Two things clear them: they post their bid and ask at the same instant, never one after the other, and both sides are the same size.
+
+## Jobs
+
+A bot run takes about a minute and an evaluation many, so neither runs inside an HTTP request. `POST /api/bots/runs` and `POST /api/surveillance/evaluations` validate the request and check the app is in book mode on a simulated clock (a 400 or 409 straight away). They then queue a job and answer `202` with its id and a `Location` header. `GET /api/jobs/{id}` reports `QUEUED`, `RUNNING`, `DONE` with the result, or `FAILED` with the reason. Jobs run one at a time on one thread, since each resets the exchange, and the last 100 are kept in memory.
 
 ## Checks
 

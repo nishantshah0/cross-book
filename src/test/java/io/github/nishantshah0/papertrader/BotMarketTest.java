@@ -37,8 +37,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class BotMarketTest extends ApiTestSupport {
 
     private static final List<String> SYMBOLS = List.of("BTA", "BTB", "BTC", "BTD");
-    private static final int NOISE = 30, MAKERS = 4, READERS = 6, VALUE = 4, SPOOFERS = 1, TICKS = 40;
-    private static final int BOTS = NOISE + MAKERS + READERS + VALUE + SPOOFERS;
+    private static final int NOISE = 30, MAKERS = 4, READERS = 6, VALUE = 4, SPOOFERS = 1, LOOKALIKES = 1, TICKS = 40;
+    private static final int BOTS = NOISE + MAKERS + READERS + VALUE + SPOOFERS + LOOKALIKES;
 
     @Autowired
     BotRunner runner;
@@ -78,9 +78,10 @@ class BotMarketTest extends ApiTestSupport {
     void theBotsMakeAMarketAroundTheFeedPrice() throws Exception {
         var result = post("/api/bots/runs", """
                 {"seed": 5, "ticks": %d, "noiseTraders": %d, "marketMakers": %d, "bookReaders": 0, "valueTraders": 0, "spoofers": 0,
-                 "symbols": ["bta", "btb", "btc", "btd"]}""".formatted(TICKS, NOISE, MAKERS));
-        assertThat(result).hasStatus(HttpStatus.OK);
-        BotRunReport report = read(result, BotRunReport.class);
+                 "lookalikes": 0, "symbols": ["bta", "btb", "btc", "btd"]}""".formatted(TICKS, NOISE, MAKERS));
+        assertThat(result).hasStatus(HttpStatus.ACCEPTED);
+        assertThat(result.getResponse().getHeader("Location")).startsWith("/api/jobs/");
+        BotRunReport report = json.treeToValue(finished(result), BotRunReport.class);
 
         assertThat(report.ledgerBalanced()).isTrue();
         assertThat(report.endedAt()).isEqualTo(report.startedAt().plusSeconds(15L * TICKS));
@@ -125,6 +126,15 @@ class BotMarketTest extends ApiTestSupport {
         assertThat(makers).isNotEqualTo(List.of(0, 1, 2, 3))
                 .isNotEqualTo(List.of(key.size() - 4, key.size() - 3, key.size() - 2, key.size() - 1));
         assertThat(jdbc.queryForObject("select count(*) from accounts", Long.class)).isEqualTo(BOTS);
+        // value traders take what is mispriced and leave nothing resting at a stale price
+        assertThat(jdbc.queryForObject("""
+                select count(*) from orders o join answer_key k on k.account_id = o.account_id
+                where k.kind = 'VALUE_TRADER' and o.status = 'OPEN'
+                """, Long.class)).isZero();
+        assertThat(jdbc.queryForObject("""
+                select count(*) from orders o join answer_key k on k.account_id = o.account_id
+                where k.kind = 'VALUE_TRADER' and o.order_type = 'LIMIT'
+                """, Long.class)).isGreaterThan(10);
     }
 
     // Every order a spoofer places is labelled, and the labels describe layering: in each
@@ -132,7 +142,7 @@ class BotMarketTest extends ApiTestSupport {
     // other, and the fakes pulled within seconds.
     @Test
     void theSpooferLayersFakeOrdersAndTheAnswerKeyLabelsEachOne() {
-        BotRunReport report = runner.run(new BotRunRequest(21L, 80, NOISE, MAKERS, 10, VALUE, 2, 4, SYMBOLS));
+        BotRunReport report = runner.run(new BotRunRequest(21L, 80, NOISE, MAKERS, 10, VALUE, 2, 4, 2, SYMBOLS));
         var spoofers = answerKey.entries().stream().filter(e -> e.kind() == BotKind.SPOOFER)
                 .map(AnswerKey.Entry::accountId).toList();
         assertThat(spoofers).hasSize(2);
@@ -177,23 +187,55 @@ class BotMarketTest extends ApiTestSupport {
         assertThat((double) pulled.size() / fakes.size()).as("share of fakes cancelled").isGreaterThan(0.85);
         assertThat(pulled).allMatch(o -> o.lifeSeconds() >= 2 && o.lifeSeconds() <= 6.01);
         assertThat(report.kinds()).extracting(BotRunReport.KindSummary::kind).contains(BotKind.SPOOFER);
+        // the report's spoofing summary agrees with the labels
+        assertThat(report.spoofing().fakeOrders()).isEqualTo(fakes.size());
+        assertThat(report.spoofing().episodes()).isEqualTo(episodes.size());
+        assertThat(report.activity()).extracting(BotRunReport.KindActivity::kind)
+                .contains(BotKind.SPOOFER, BotKind.LOOKALIKE, BotKind.NOISE);
+    }
+
+    // A spoofer's starting stake (two stocks, a quarter of its cash in each) is a shape no
+    // other honest kind has, and starting stakes are in the trade log. The lookalikes
+    // share it, so an account's stake can at best halve the field: of the accounts that
+    // start the way the spoofers do, no more than half are cheaters.
+    @Test
+    void aSpoofersStartingStakeDoesNotGiveItAway() {
+        runner.run(new BotRunRequest(21L, 10, NOISE, MAKERS, 10, VALUE, 2, 4, 2, SYMBOLS));
+        record Stake(long account, int stocks, boolean cheater) {
+        }
+        List<Stake> stakes = jdbc.query("""
+                select t.account_id, count(distinct t.symbol) as stocks, k.cheater
+                from trades t join answer_key k on k.account_id = t.account_id
+                where t.counterparty_order_id is null
+                group by t.account_id, k.cheater
+                """, (row, n) -> new Stake(row.getLong(1), row.getInt(2), row.getBoolean(3)));
+        int spoofersStake = stakes.stream().filter(Stake::cheater).findFirst().orElseThrow().stocks();
+        var same = stakes.stream().filter(s -> s.stocks() == spoofersStake).toList();
+        assertThat(same.stream().filter(Stake::cheater).count()).isEqualTo(2);
+        assertThat(same).hasSizeGreaterThanOrEqualTo(4);
+        assertThat(answerKey.entries()).filteredOn(e -> e.kind() == BotKind.LOOKALIKE).hasSize(2)
+                .noneMatch(AnswerKey.Entry::cheater);
     }
 
     // With no fake layers the spoofer is the control: same timing and real orders, and
     // honest, so the answer key must not call it a cheater.
     @Test
     void aSpooferWithNoFakeLayersIsTheHonestControl() {
-        runner.run(new BotRunRequest(21L, 40, NOISE, MAKERS, 10, VALUE, 2, 0, SYMBOLS));
+        runner.run(new BotRunRequest(21L, 40, NOISE, MAKERS, 10, VALUE, 2, 0, 2, SYMBOLS));
         assertThat(answerKey.entries()).filteredOn(e -> e.kind() == BotKind.SPOOFER).hasSize(2)
                 .noneMatch(AnswerKey.Entry::cheater);
-        assertThat(answerKey.orders()).isNotEmpty().allMatch(o -> o.role().equals("REAL"));
+        assertThat(answerKey.orders()).isEmpty(); // only cheaters' orders carry labels
+        assertThat(jdbc.queryForObject("""
+                select count(*) from orders o join answer_key k on k.account_id = o.account_id
+                where k.kind = 'SPOOFER' and o.order_type = 'LIMIT'
+                """, Long.class)).isGreaterThan(10); // but they traded
     }
 
     // The rules catch both spoofers and flag nobody honest, and the orders they point
     // at are the fakes. The naive baseline catches them too, but also the market makers.
     @Test
     void theRulesCatchTheSpoofersAndTheBaselineAlsoFlagsTheMakers() throws Exception {
-        runner.run(new BotRunRequest(21L, 80, NOISE, MAKERS, 10, VALUE, 2, 4, SYMBOLS));
+        runner.run(new BotRunRequest(21L, 80, NOISE, MAKERS, 10, VALUE, 2, 4, 2, SYMBOLS));
 
         Score rules = grader.grade("spoofing-rules", surveillance.scan("spoofing-rules"));
         assertThat(rules.caught()).isEqualTo(2);
@@ -203,7 +245,7 @@ class BotMarketTest extends ApiTestSupport {
 
         Score baseline = grader.grade("cancel-ratio", surveillance.scan("cancel-ratio"));
         assertThat(baseline.caught()).isEqualTo(2);
-        assertThat(baseline.falseAlarmsByKind()).containsKey(BotKind.MARKET_MAKER);
+        assertThat(baseline.falseAlarmsByKind()).containsKeys(BotKind.MARKET_MAKER, BotKind.LOOKALIKE);
         assertThat(baseline.orders()).isNull(); // it judges accounts, not orders
 
         // and the same over HTTP
@@ -223,7 +265,7 @@ class BotMarketTest extends ApiTestSupport {
     // must leave it alone; the baseline cannot tell the difference.
     @Test
     void theRulesLeaveTheControlAloneAndTheBaselineDoesNot() {
-        runner.run(new BotRunRequest(21L, 80, NOISE, MAKERS, 10, VALUE, 2, 0, SYMBOLS));
+        runner.run(new BotRunRequest(21L, 80, NOISE, MAKERS, 10, VALUE, 2, 0, 2, SYMBOLS));
         assertThat(surveillance.scan("spoofing-rules")).isEmpty();
         assertThat(grader.grade("cancel-ratio", surveillance.scan("cancel-ratio")).falseAlarmsByKind())
                 .containsKey(BotKind.SPOOFER);
@@ -232,21 +274,53 @@ class BotMarketTest extends ApiTestSupport {
     @Test
     void anEvaluationScoresEveryDetectorOnBothMarkets() throws Exception {
         var result = post("/api/surveillance/evaluations", "{\"seeds\": [21], \"ticks\": 20}");
-        assertThat(result).hasStatus(HttpStatus.OK);
-        var report = json.readTree(result.getResponse().getContentAsString());
+        assertThat(result).hasStatus(HttpStatus.ACCEPTED);
+        var report = finished(result);
         assertThat(report.get("runs").size()).isEqualTo(2);
         assertThat(report.get("totals").size()).isEqualTo(4); // two detectors, two markets
         assertThat(post("/api/surveillance/evaluations", "{\"seeds\": []}")).hasStatus(HttpStatus.BAD_REQUEST);
     }
 
+    // A run's mistakes that only show once it starts (here, a stock the feed does not
+    // quote) come back through its job, not as a lost request.
+    @Test
+    void aJobThatFailsSaysWhy() throws Exception {
+        var result = post("/api/bots/runs", "{\"seed\": 1, \"ticks\": 2, \"symbols\": [\"NOPE\"]}");
+        assertThat(result).hasStatus(HttpStatus.ACCEPTED);
+        var job = await(json.readTree(result.getResponse().getContentAsString()).get("id").asLong());
+        assertThat(job.get("status").asString()).isEqualTo("FAILED");
+        assertThat(job.get("error").asString()).contains("NOPE");
+        assertThat(get("/api/jobs/999999")).hasStatus(HttpStatus.NOT_FOUND);
+    }
+
+    // the result of the job a 202 started, once it is done
+    private tools.jackson.databind.JsonNode finished(org.springframework.test.web.servlet.assertj.MvcTestResult started)
+            throws Exception {
+        var job = await(json.readTree(started.getResponse().getContentAsString()).get("id").asLong());
+        assertThat(job.get("status").asString()).as(job.toString()).isEqualTo("DONE");
+        return job.get("result");
+    }
+
+    private tools.jackson.databind.JsonNode await(long id) throws Exception {
+        long deadline = System.nanoTime() + 120_000_000_000L;
+        while (true) {
+            var job = json.readTree(get("/api/jobs/" + id).getResponse().getContentAsString());
+            String status = job.get("status").asString();
+            if (status.equals("DONE") || status.equals("FAILED") || System.nanoTime() > deadline) {
+                return job;
+            }
+            Thread.sleep(100);
+        }
+    }
+
     private static BotRunRequest request(long seed) {
-        return new BotRunRequest(seed, TICKS, NOISE, MAKERS, READERS, VALUE, SPOOFERS, null, SYMBOLS);
+        return new BotRunRequest(seed, TICKS, NOISE, MAKERS, READERS, VALUE, SPOOFERS, null, LOOKALIKES, SYMBOLS);
     }
 
     private static BotRunReport withoutTiming(BotRunReport r) {
-        return new BotRunReport(r.seed(), r.ticks(), r.noiseTraders(), r.marketMakers(), r.bookReaders(), r.valueTraders(), r.spoofers(), r.spoofLayers(), r.symbols(), r.startedAt(),
+        return new BotRunReport(r.seed(), r.ticks(), r.noiseTraders(), r.marketMakers(), r.bookReaders(), r.valueTraders(), r.spoofers(), r.spoofLayers(), r.lookalikes(), r.symbols(), r.startedAt(),
                 r.endedAt(), r.actions(), r.ordersPlaced(), r.refused(), r.cancelled(), r.cancelsTooLate(),
-                r.trades(), r.prices(), r.kinds(), r.ledgerBalanced(), 0, 0);
+                r.trades(), r.prices(), r.kinds(), r.activity(), r.spoofing(), r.ledgerBalanced(), 0, 0);
     }
 
     // every row a run writes, hashed

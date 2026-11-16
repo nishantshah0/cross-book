@@ -1,12 +1,16 @@
 package io.github.nishantshah0.papertrader.grading;
 
+import io.github.nishantshah0.papertrader.bots.BotRunner;
+import io.github.nishantshah0.papertrader.jobs.Jobs;
 import io.github.nishantshah0.papertrader.surveillance.Surveillance;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
+import java.net.URI;
 import java.util.List;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,11 +26,15 @@ class GradingController {
     private final Surveillance surveillance;
     private final Grader grader;
     private final Evaluation evaluation;
+    private final BotRunner runner;
+    private final Jobs jobs;
 
-    GradingController(Surveillance surveillance, Grader grader, Evaluation evaluation) {
+    GradingController(Surveillance surveillance, Grader grader, Evaluation evaluation, BotRunner runner, Jobs jobs) {
         this.surveillance = surveillance;
         this.grader = grader;
         this.evaluation = evaluation;
+        this.runner = runner;
+        this.jobs = jobs;
     }
 
     // a detector's alerts on the market as it stands, graded against its answer key
@@ -35,10 +43,14 @@ class GradingController {
         return grader.grade(detector, surveillance.scan(detector));
     }
 
-    // runs a spoofed and a control market for each seed and scores every detector on
-    // both; this resets the exchange for every market, and takes about a minute each
+    // Runs a spoofed and a control market for each seed and scores every detector on
+    // both, as a job (202 at once; GET /api/jobs/{id} for the report). It resets the
+    // exchange for every market, and an hour-long market takes about a minute.
     @PostMapping("/api/surveillance/evaluations")
-    Evaluation.Report evaluate(@Valid @RequestBody EvaluationRequest request) {
-        return evaluation.evaluate(new Evaluation.Request(request.seeds(), request.ticks()));
+    ResponseEntity<Jobs.Job> evaluate(@Valid @RequestBody EvaluationRequest request) {
+        runner.requireRunnable();
+        Jobs.Job job = jobs.submit("evaluation",
+                () -> evaluation.evaluate(new Evaluation.Request(request.seeds(), request.ticks())));
+        return ResponseEntity.accepted().location(URI.create("/api/jobs/" + job.id())).body(job);
     }
 }

@@ -107,12 +107,34 @@ the sequences would hand out different ids on a replay. That is not worth breaki
 exact replays for.
 
 The real bot runner (`BotRunner`, see the architecture notes) lands in the same place.
-Its default market, 140 bots on twelve stocks for an hour of market time, took 48,885
-actions in 68 seconds with seed 1 (about 715 a second), on a fresh database.
+Its default market, 142 bots on twelve stocks for an hour of market time, took 49,240
+actions in 65 seconds with seed 1 (about 756 a second), on a fresh database.
 
-At this speed a run of 150,000 bot actions takes about four minutes. Independent runs,
-one per seed, can go in parallel on separate databases, which is how scoring across many
-seeds should scale.
+At this speed a run of 150,000 bot actions takes about four minutes.
+
+## Many markets at once
+
+One market can't go faster without giving up exact replays, but markets with different
+seeds share nothing. `tools/lab/lab.py` starts one throwaway Postgres container with a
+database per worker, and N copies of the packaged app, each in book mode on the
+simulated clock. It hands each worker the next seed through the job API and merges the
+reports. Each worker still runs one market at a time, so a seed's market is the same
+one a single app would run: the same seed sent to two workers at once came back with
+identical reports.
+
+It helps less than the worker count suggests. The 30 spoofing pairs (60 markets) took
+49 minutes with 6 workers, against about 65 minutes one at a time at 65 seconds a
+market, so about 1.3 times faster. Each market took about 290 seconds while five others
+ran, because the laptop has 4 performance cores and every worker shares one Postgres.
+The saving is mostly in not waiting between runs. A machine with more cores should do
+better, but I haven't measured one. Each finished market is cached by jar and request,
+so a run that dies partway (a sleeping laptop did, once) picks up where it left off.
+
+```bash
+./mvnw -DskipTests package
+python3 tools/lab/lab.py --workers 6 evaluate --seeds 101-105
+python3 tools/lab/lab.py --workers 6 spoof-pairs --seeds 201-230
+```
 
 The same changes against the concurrent HTTP load test, on the same laptop with a much
 bigger database (407,000 trades against 135,000):

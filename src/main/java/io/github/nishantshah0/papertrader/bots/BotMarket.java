@@ -79,9 +79,12 @@ final class BotMarket {
         return bids + asks == 0 ? 0 : (double) (bids - asks) / (bids + asks);
     }
 
-    // marks a cheater's order in the answer key, for grading a detector order by order
-    void label(Order order, int episode, String role) {
-        answerKey.addOrder(order, episode, role);
+    // marks a cheater's order in the answer key, for grading a detector order by order;
+    // an honest bot running the same code (a lookalike, or the control) labels nothing
+    void label(Bot bot, Order order, int episode, String role) {
+        if (bot.cheater()) {
+            answerKey.addOrder(order, episode, role);
+        }
     }
 
     int shares(long accountId, String symbol) {

@@ -199,6 +199,48 @@ class MatchingEngineTest {
         }
     }
 
+    // Interrupting the caller is the same race as a timeout: once the order is running it
+    // will commit, so the caller gets the real result, and the interrupt is kept.
+    @Test
+    void aCallerInterruptedWhileItsOrderRunsStillGetsTheRealResult() throws Exception {
+        when(execution.place(any(), any(), any(), any(), any(), any())).thenAnswer(call -> {
+            Thread.sleep(400);
+            return new Result(bid80, List.of());
+        });
+        AtomicReference<Object> outcome = new AtomicReference<>();
+        AtomicReference<Boolean> stillInterrupted = new AtomicReference<>();
+        Thread caller = Thread.ofPlatform().start(() -> {
+            try {
+                outcome.set(engine.place(3L, request, null, "AAPL"));
+            } catch (RuntimeException e) {
+                outcome.set(e);
+            }
+            stillInterrupted.set(Thread.currentThread().isInterrupted());
+        });
+        Thread.sleep(100); // the order is inside its transaction
+        caller.interrupt();
+        caller.join(5_000);
+
+        assertThat(outcome.get()).isSameAs(bid80);
+        assertThat(stillInterrupted.get()).isTrue();
+    }
+
+    // A snapshot refreshes only when the book changes, so a feed that goes stale under it
+    // must not leave a live-looking house quote on show while orders are refused.
+    @Test
+    void aStaleFeedTakesTheHouseOutOfTheBookView() {
+        Quote quote = new Quote("AAPL", new BigDecimal("200"), Instant.now());
+        when(quotes.get("AAPL")).thenReturn(Optional.of(quote));
+        when(quotes.isTradable(quote)).thenReturn(true);
+        engine.tick("AAPL"); // refreshes the snapshot with the house in it; nothing crosses at 200
+        assertThat(engine.book("AAPL", 5).house()).isNotNull();
+
+        when(quotes.isTradable(quote)).thenReturn(false); // the provider stops answering
+        assertThat(engine.book("AAPL", 5).house()).isNull();
+        assertThat(engine.book("AAPL", 5).bids()).hasSize(2); // the users' book is still there
+        assertThat(engine.estimatePrice("AAPL", OrderSide.BUY, 1)).isNull();
+    }
+
     private MatchingEngine engine(long timeoutMs) {
         MatchingEngine built = new MatchingEngine(repository, trades, execution, quotes, PriceImpact.none(), 0,
                 "house", Clock.systemUTC(), timeoutMs);

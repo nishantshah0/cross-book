@@ -22,8 +22,9 @@ import java.util.List;
 //
 // With zero layers it is the control: the same bot, same timing, same real orders, but
 // nothing fake. That one is honest, so the answer key says so, and it is the hardest
-// kind of innocent account for a detector to clear. Measured over three seeds, the
-// fakes doubled how often the real order filled and turned a small loss into a profit.
+// kind of innocent account for a detector to clear. Every market also has lookalikes,
+// controls that trade alongside the spoofers, so even a spoofer's starting stake (two
+// stocks, a quarter of its cash in each) does not give it away.
 final class Spoofer extends Bot {
 
     static final double REST_GAP_MS = 40_000;
@@ -46,7 +47,16 @@ final class Spoofer extends Bot {
     private int episode;
 
     Spoofer(int ordinal, long runSeed, int layers) {
-        super(BotKind.SPOOFER, ordinal, runSeed, REST_GAP_MS);
+        this(BotKind.SPOOFER, ordinal, runSeed, layers);
+    }
+
+    // a lookalike: the spoofer's twin with nothing fake
+    static Spoofer lookalike(int ordinal, long runSeed) {
+        return new Spoofer(BotKind.LOOKALIKE, ordinal, runSeed, 0);
+    }
+
+    private Spoofer(BotKind kind, int ordinal, long runSeed, int layers) {
+        super(kind, ordinal, runSeed, REST_GAP_MS);
         this.layers = layers;
     }
 
@@ -105,7 +115,7 @@ final class Spoofer extends Bot {
             }
             market.limit(accountId, symbol, fakeSide, shares, at).filter(Order::isOpen).ifPresent(order -> {
                 fakes.add(order.getId());
-                market.label(order, episode, "SPOOF");
+                market.label(this, order, episode, "SPOOF");
             });
         }
         step = fakes.isEmpty() && layers > 0 ? Step.REST : Step.LAYERED;
@@ -127,7 +137,7 @@ final class Spoofer extends Bot {
             }
             if (shares > 0) {
                 market.limit(accountId, symbol, realSide, shares, price).ifPresent(order -> {
-                    market.label(order, episode, "REAL");
+                    market.label(this, order, episode, "REAL");
                     if (order.isOpen()) {
                         real = order.getId();
                     }

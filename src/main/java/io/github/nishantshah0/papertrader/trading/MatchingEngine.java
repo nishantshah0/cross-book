@@ -335,13 +335,24 @@ public class MatchingEngine {
                 flowBps + bookBps);
     }
 
+    // The latest snapshot, without waiting behind the matcher. A snapshot only refreshes
+    // when the book changes, so the feed can go stale under one (a provider outage leaves
+    // no event behind): then the house it shows is gone, exactly as orders would find it.
     private Snapshot snapshot(String symbol) {
         Snapshot snapshot = matcher(symbol).snapshot;
-        return snapshot != null ? snapshot : call(symbol, () -> {
-            Matcher matcher = matcher(symbol);
-            refresh(matcher);
-            return matcher.snapshot;
-        });
+        if (snapshot == null) {
+            return call(symbol, () -> {
+                Matcher matcher = matcher(symbol);
+                refresh(matcher);
+                return matcher.snapshot;
+            });
+        }
+        if (snapshot.house() != null && quotes.get(symbol).filter(quotes::isTradable).isEmpty()) {
+            BookView view = snapshot.view();
+            return new Snapshot(new BookView(view.symbol(), view.market(), null, view.bids(), view.asks(), view.feed(),
+                    view.flowBps(), view.bookBps(), view.lastPrice()), null, snapshot.leanBps());
+        }
+        return snapshot;
     }
 
     // The house as it stands: the feed price, leaned by the resting orders near it and by
@@ -408,8 +419,32 @@ public class MatchingEngine {
             }
             throw new IllegalStateException(e.getCause());
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new EngineBusyException(symbol);
+            // the same race as a timeout: a 503 only if the task can no longer start; if it
+            // already has, wait out its real result and keep the interrupt for the caller
+            if (state.compareAndSet(QUEUED, ABANDONED)) {
+                Thread.currentThread().interrupt();
+                throw new EngineBusyException(symbol);
+            }
+            try {
+                return uninterruptibly(future);
+            } finally {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private static <T> T uninterruptibly(Future<T> future) {
+        while (true) {
+            try {
+                return future.get();
+            } catch (InterruptedException ignored) {
+                // keep waiting; the caller's interrupt is restored once the result is in
+            } catch (ExecutionException e) {
+                if (e.getCause() instanceof RuntimeException runtime) {
+                    throw runtime;
+                }
+                throw new IllegalStateException(e.getCause());
+            }
         }
     }
 

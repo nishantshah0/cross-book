@@ -7,7 +7,10 @@ public enum BotKind {
     MARKET_MAKER(2, "maker", false),
     BOOK_READER(3, "reader", false),
     SPOOFER(4, "spoofer", true),
-    VALUE_TRADER(5, "value", false);
+    VALUE_TRADER(5, "value", false),
+    // trades exactly like a spoofer, with the same starting stake, but places no fake
+    // orders: honest, and there so nothing but the spoofing tells a spoofer apart
+    LOOKALIKE(6, "lookalike", false);
 
     final int id;
     final String prefix;

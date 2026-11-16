@@ -1,5 +1,6 @@
 package io.github.nishantshah0.papertrader.bots;
 
+import io.github.nishantshah0.papertrader.trading.Order;
 import io.github.nishantshah0.papertrader.trading.OrderSide;
 import java.util.List;
 
@@ -52,8 +53,12 @@ final class ValueTrader extends Bot {
         if (shares == 0) {
             return;
         }
-        // a limit at the feed price, so it takes the mispriced orders and no further
+        // A limit at the feed price takes the mispriced orders and no further. Whatever is
+        // left is cancelled at once, the way an immediate-or-cancel order would be: left
+        // resting, it would sit at a stale price as the feed moved and get picked off.
         market.limit(accountId, pick, side, shares, BotMarket.cents(market.feed(pick),
-                side == OrderSide.BUY ? OrderSide.SELL : OrderSide.BUY));
+                side == OrderSide.BUY ? OrderSide.SELL : OrderSide.BUY))
+                .filter(Order::isOpen)
+                .ifPresent(order -> market.cancel(accountId, order.getId()));
     }
 }
