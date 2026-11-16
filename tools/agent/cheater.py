@@ -21,9 +21,12 @@ target/agent/<time>/.
     export ANTHROPIC_API_KEY=...                  # or an `ant auth login` profile
     caffeinate -i uv run tools/agent/cheater.py   # about an hour with 6 workers
 
+    caffeinate -i uv run tools/agent/cheater.py --via claude-code   # on a claude.ai login instead
+
     uv run tools/agent/cheater.py --dry-run       # the same loop with scripted tactics, no API calls
 
-Needs Docker, Java 21 and uv. Costs a few dollars of API use at the defaults.
+Needs Docker, Java 21 and uv. Costs a few dollars of API use at the defaults; with
+--via claude-code it counts against the subscription's usage limits instead.
 """
 
 import argparse
@@ -239,6 +242,64 @@ class Claude:
             for call_id, text, error in results]})
 
 
+class ClaudeCode:
+    """The cheater through Claude Code's headless mode (`claude -p`), so it runs on a
+    claude.ai subscription instead of an API key. Same model, prompt and loop: each
+    turn resumes one session and Claude answers with one JSON action instead of a tool
+    call. Claude Code's own tools are switched off, and so are settings and MCP servers."""
+
+    SCHEMA = {"type": "object", "properties": dict(
+        {"action": {"type": "string", "enum": ["run_trial", "submit"]}}, **TACTICS_PROPERTIES,
+        note={"type": "string", "description": "for run_trial, your hypothesis; for submit, your reasoning"}),
+        "required": ["action", *TACTICS_PROPERTIES, "note"], "additionalProperties": False}
+    INSTRUCTION = ("\n\nAnswer every turn with one JSON object: action run_trial (to test tactics) or submit "
+                   "(to finish), the tactics, and note: your hypothesis for a trial, or your reasoning for submit.")
+
+    def __init__(self, log, workdir):
+        import shutil
+        import subprocess
+        import uuid
+        self.subprocess = subprocess
+        self.binary = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
+        if not os.path.exists(self.binary):
+            sys.exit("claude not found; install Claude Code and sign in, or drop --via claude-code")
+        self.log = log
+        self.workdir = workdir
+        self.session = str(uuid.uuid4())
+        self.started = False
+        self.pending = None
+        self.turns = 0
+
+    def start(self, opening):
+        self.pending = opening
+
+    def calls(self):
+        command = [self.binary, "-p", self.pending, "--output-format", "json", "--tools", "",
+                   "--json-schema", json.dumps(self.SCHEMA), "--model", MODEL, "--effort", "high",
+                   "--setting-sources", "", "--strict-mcp-config"]
+        command += ["--resume", self.session] if self.started else \
+            ["--session-id", self.session, "--system-prompt", SYSTEM + self.INSTRUCTION]
+        done = self.subprocess.run(command, cwd=self.workdir, capture_output=True, text=True, timeout=1_200)
+        self.started = True
+        self.turns += 1
+        try:
+            reply = json.loads(done.stdout)
+        except ValueError:
+            raise RuntimeError("claude -p failed: %s" % (done.stderr or done.stdout)[-2_000:])
+        self.log("response", {k: reply.get(k) for k in ("session_id", "result", "structured_output", "is_error",
+                                                          "subtype", "stop_reason", "num_turns", "usage")})
+        action = reply.get("structured_output")
+        if reply.get("is_error") or not isinstance(action, dict):
+            raise RuntimeError("claude -p gave no action: %s" % str(reply.get("result"))[-2_000:])
+        name = action.pop("action")
+        note = action.pop("note", "")
+        action["hypothesis" if name == "run_trial" else "reasoning"] = note
+        return [("turn-%d" % self.turns, name, action)]
+
+    def answer(self, results):
+        self.pending = "\n\n".join(text for _, text, _ in results)
+
+
 class Scripted:
     """Stands in for Claude in --dry-run: tries two fixed ideas, then submits the second."""
 
@@ -271,6 +332,8 @@ def main():
     parser.add_argument("--workers", type=int, default=6, help="apps running markets at once (default 6)")
     parser.add_argument("--ticks", type=int, default=240, help="ticks per market (default 240, an hour)")
     parser.add_argument("--dry-run", action="store_true", help="scripted tactics instead of Claude")
+    parser.add_argument("--via", choices=["api", "claude-code"], default="api",
+                        help="api (ANTHROPIC_API_KEY, the default) or claude-code (claude -p on a claude.ai login)")
     parser.add_argument("--held-out", type=int, default=len(HELD_OUT_SEEDS), help="held-out seeds (default 10)")
     args = parser.parse_args()
 
@@ -282,18 +345,23 @@ def main():
         transcript.write(json.dumps({"at": time.time(), "kind": kind, "data": data}, default=str) + "\n")
         transcript.flush()
 
-    agent = Scripted(log) if args.dry_run else Claude(log)
+    if args.dry_run:
+        agent = Scripted(log)
+    elif args.via == "claude-code":
+        agent = ClaudeCode(log, out)
+    else:
+        agent = Claude(log)
     trials = []
     held_out = HELD_OUT_SEEDS[:args.held_out]
     with lab.Lab(args.workers) as market:
-        def trial(layers, tactics, label):
+        def trial(layers, tactics, label, hypothesis=None):
             summary = summarize(TRAIN_SEEDS, market.run(markets(TRAIN_SEEDS, layers, tactics, args.ticks), label))
-            trials.append(dict(layers=layers, tactics=tactics, summary=summary))
+            trials.append(dict(layers=layers, tactics=tactics, hypothesis=hypothesis, summary=summary))
             return summary
 
         print("trial 0: the built-in spoofer", flush=True)
         layers, tactics = tactics_of(BUILT_IN)
-        baseline = trial(layers, tactics, "trial 0")
+        baseline = trial(layers, tactics, "trial 0", "the built-in spoofer, run by the harness")
         print(feedback(baseline), flush=True)
         agent.start("The built-in spoofer, on the training markets:\n" + feedback(baseline)
                     + "\n\nYou have %d trials." % args.trials)
@@ -318,7 +386,7 @@ def main():
                 n = len(trials)
                 print("\ntrial %d: %s\n  %s" % (n, arguments.get("hypothesis", ""), json.dumps(dict(layers=layers, **tactics))),
                       flush=True)
-                summary = trial(layers, tactics, "trial %d" % n)
+                summary = trial(layers, tactics, "trial %d" % n, arguments.get("hypothesis"))
                 text = feedback(summary) + "\n%d trials left." % (args.trials - n)
                 print(text, flush=True)
                 results.append((call_id, text, False))
@@ -333,7 +401,7 @@ def main():
         graded = {"cheater": grade(final["layers"], final["tactics"], "held-out cheater"),
                   "built-in": grade(built_in_layers, built_in, "held-out built-in")}
 
-    report = {"model": None if args.dry_run else MODEL, "detector": DETECTOR, "trainSeeds": TRAIN_SEEDS,
+    report = {"model": None if args.dry_run else MODEL, "via": None if args.dry_run else args.via, "detector": DETECTOR, "trainSeeds": TRAIN_SEEDS,
               "heldOutSeeds": held_out, "ticks": args.ticks, "trials": trials, "final": final,
               "heldOut": {name: dict(summary, paired=paired(summary["rows"])) for name, summary in graded.items()}}
     with open(os.path.join(out, "result.json"), "w") as f:
