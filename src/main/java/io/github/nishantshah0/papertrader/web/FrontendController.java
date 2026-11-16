@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 class FrontendController {
     // Explicit UI routes only: API errors and missing assets must remain real 404s.
-    @GetMapping({"/terminal", "/terminal/"})
+    @GetMapping({"/terminal", "/terminal/", "/surveillance", "/surveillance/"})
     String terminal() {
         return "forward:/index.html";
     }

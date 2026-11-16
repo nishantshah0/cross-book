@@ -139,6 +139,14 @@ svg:focus-visible {
   font-size: 12px;
 }
 
+.topbar-nav {
+  color: var(--muted);
+}
+
+.topbar-nav:hover {
+  color: var(--text);
+}
+
 .connection {
   display: inline-flex;
   align-items: center;

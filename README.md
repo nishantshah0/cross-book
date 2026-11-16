@@ -48,7 +48,7 @@ cd cross-book
 docker compose --profile app up --build -d --wait
 ```
 
-Open **http://localhost:8080**, choose **Open practice account**, pick a lowercase name and you start with **$100,000** in virtual cash. Keep the account ID to reopen the account later. The terminal is at **http://localhost:8080/terminal**.
+Open **http://localhost:8080**, choose **Open practice account**, pick a lowercase name and you start with **$100,000** in virtual cash. Keep the account ID to reopen the account later. The terminal is at **http://localhost:8080/terminal**, and the surveillance desk (the detector's alert queue, and AI cheater runs as they happen) is at **http://localhost:8080/surveillance**.
 
 The first build downloads Java and Node dependencies. The app and database listen on localhost only. To stop them and keep your data:
 
@@ -522,6 +522,8 @@ All bodies are JSON and errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc
 | GET    | `/api/surveillance/score?detector=`     | Those alerts graded against the answer key |
 | POST   | `/api/surveillance/evaluations`         | Start a job scoring every detector on a spoofed and a control market per seed |
 | POST   | `/api/surveillance/trials`              | Start a job running one market (with optional spoofer `tactics`) and return each detector's verdict on each spoofer |
+| GET    | `/api/red-team/runs`                    | AI cheater runs from `tools/agent/cheater.py`, newest first, live ones included |
+| GET    | `/api/red-team/runs/{name}`             | One run as it stands: every trial, Claude's hypotheses, the held-out result |
 | GET    | `/api/jobs/{id}`                        | A job's status, and its result once it's done |
 | GET    | `/actuator/health`                      | Health check                               |
 

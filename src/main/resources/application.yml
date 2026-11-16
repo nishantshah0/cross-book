@@ -60,6 +60,10 @@ papertrader:
     mode: ${CLOCK_MODE:system}
     start: ${CLOCK_START:2026-01-05T14:30:00Z}
   starting-cash: 100000.00
+  # where tools/agent/cheater.py writes its AI cheater runs; the surveillance page's
+  # red-team tab reads them from here
+  red-team:
+    runs-dir: ${RED_TEAM_RUNS_DIR:target/agent}
   # Demo reference prices; live mode will not execute against these seeds
   seed-quotes:
     AAPL: 232.15

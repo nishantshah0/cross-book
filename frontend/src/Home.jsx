@@ -605,6 +605,7 @@ export default function Home() {
           <a href="#questions" onClick={close}>
             FAQ
           </a>
+          <a href="/surveillance">Surveillance</a>
           <a href={REPO} target="_blank" rel="noreferrer" onClick={close}>
             GitHub
           </a>

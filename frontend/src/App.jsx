@@ -381,6 +381,9 @@ export default function App() {
         </a>
         <h1>Trading terminal</h1>
         <div className="topbar-right">
+          <a className="topbar-nav" href="/surveillance">
+            Surveillance
+          </a>
           <span className="connection">
             <i className={connected ? "online" : ""} />
             <span>{connected ? "Connected" : "Reconnecting"}</span>
