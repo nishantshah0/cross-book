@@ -43,6 +43,7 @@ import argparse
 import json
 import math
 import os
+import re
 import statistics
 import sys
 import threading
@@ -430,7 +431,7 @@ class Live:
         os.replace(path + ".tmp", path)
 
 
-def grade_later(run, workers):
+def grade_later(run, workers, external=()):
     """Held-out grading for a run that skipped it. The built-in spoofer's held-out markets
     are the same in every run, so only the submitted tactics are run here."""
     path = os.path.join(run, "result.json")
@@ -439,7 +440,7 @@ def grade_later(run, workers):
     global DETECTOR
     DETECTOR = result["detector"]
     final, held_out = result["final"], result["heldOutSeeds"]
-    with lab.Lab(workers) as market:
+    with lab.Lab(workers, external) as market:
         summary = summarize(held_out, market.run(markets(held_out, final["layers"], final["tactics"], result["ticks"]),
                                                  "held-out cheater"))
     result["heldOut"] = {"cheater": dict(summary, paired=paired(summary["rows"]))}
@@ -470,6 +471,8 @@ def main():
     parser.add_argument("--via", choices=["api", "claude-code"], default="api",
                         help="api (ANTHROPIC_API_KEY, the default) or claude-code (claude -p on a claude.ai login)")
     parser.add_argument("--held-out", type=int, default=len(HELD_OUT_SEEDS), help="held-out seeds (default 10)")
+    parser.add_argument("--external", type=lab.external_detector, action="append", default=[], metavar="NAME=COMMAND",
+                        help="add an outside detector to every market (repeatable); attack it with --detector NAME")
     parser.add_argument("--grade", metavar="RUN",
                         help="grade a finished run's final tactics on the held-out markets and add them to its "
                              "result (for baselines run with --no-held-out that met the goal)")
@@ -477,10 +480,12 @@ def main():
     global DETECTOR
     DETECTOR = args.detector
     if args.grade:
-        return grade_later(args.grade, args.workers)
+        return grade_later(args.grade, args.workers, args.external)
     searcher = "scripted" if args.dry_run else args.searcher
     suffix = "".join("-" + part for part, on in (("dry", args.dry_run), ("random", searcher == "random"),
                                                  ("blind", args.blind), ("v2", args.detector.endswith("-v2"))) if on)
+    if args.detector in {name for name, _ in args.external}:  # attacking an outside detector: say which
+        suffix += "-" + re.sub(r"[^a-z0-9]+", "", args.detector.lower())
 
     out = os.path.join(ROOT, "target", "agent", time.strftime("%Y%m%d-%H%M%S") + suffix)
     os.makedirs(out)
@@ -496,6 +501,7 @@ def main():
                       "via": args.via if claude else None, "searcher": searcher, "blind": args.blind,
                       "searchSeed": args.search_seed if searcher == "random" else None,
                       "stopOnSuccess": args.stop_on_success, "detector": DETECTOR, "trainSeeds": TRAIN_SEEDS,
+                      "external": [dict(name=n, command=c) for n, c in args.external] or None,
                       "heldOutSeeds": held_out, "ticks": args.ticks, "budget": args.trials,
                       "trials": [], "final": None, "heldOut": None, "firstSuccess": None})
     trials = live.run["trials"]
@@ -510,7 +516,7 @@ def main():
         agent = Claude(log, system)
     print("watch it live at /surveillance in the app (Red team), run from this checkout", flush=True)
     try:
-        with lab.Lab(args.workers) as market:
+        with lab.Lab(args.workers, args.external) as market:
             def trial(layers, tactics, label, hypothesis=None):
                 live.status(phase="trial", trial=len(trials), label=label, hypothesis=hypothesis,
                             layers=layers, tactics=tactics, done=0, total=2 * len(TRAIN_SEEDS))

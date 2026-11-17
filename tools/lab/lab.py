@@ -29,6 +29,7 @@ import json
 import math
 import os
 import queue
+import shlex
 import shutil
 import socket
 import statistics
@@ -69,6 +70,28 @@ def seeds(text):
     return out
 
 
+def absolute(arg):
+    """A detector argument that names a file, made absolute so a worker finds it."""
+    return os.path.abspath(arg) if os.path.isfile(arg) else arg
+
+
+def external_detector(text):
+    """NAME=COMMAND, e.g. guidance='python3 detectors/guidance.py'"""
+    name, _, command = text.partition("=")
+    if not name or not command:
+        raise argparse.ArgumentTypeError("expected NAME=COMMAND, got %r" % text)
+    return name, shlex.split(command)
+
+
+def external_args(external):
+    """The settings that name outside detectors, one argument per word (no comma splitting)."""
+    args = []
+    for i, (name, command) in enumerate(external):
+        args.append("--papertrader.surveillance.external[%d].name=%s" % (i, name))
+        args += ["--papertrader.surveillance.external[%d].command[%d]=%s" % (i, j, arg) for j, arg in enumerate(command)]
+    return args
+
+
 def free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -89,8 +112,11 @@ def call(method, url, body=None, timeout=30):
 class Lab:
     """A Postgres container and N workers, each an app with a database of its own."""
 
-    def __init__(self, workers):
+    def __init__(self, workers, external=()):
+        """external: outside detectors as (name, [command args]), which every worker runs
+        alongside the built-in ones (see detectors/README.md)."""
         self.size = workers
+        self.external = [(name, [absolute(arg) for arg in command]) for name, command in external]
         self.container = "cross-book-lab-%d" % os.getpid()
         self.processes = []
         self.urls = []
@@ -101,7 +127,14 @@ class Lab:
         if not jars:
             sys.exit("no jar in target/; build it first: ./mvnw -DskipTests package")
         with open(jars[0], "rb") as f:
-            self.build = hashlib.sha256(f.read()).hexdigest()
+            build = hashlib.sha256(f.read())
+        for name, command in self.external:  # a result depends on the detector programs too
+            build.update(json.dumps([name, command]).encode())
+            for arg in command:
+                if os.path.isfile(arg):
+                    with open(arg, "rb") as f:
+                        build.update(f.read())
+        self.build = build.hexdigest()
         if shutil.which("docker") is None:
             sys.exit("docker is not on the PATH")
         os.makedirs(OUT, exist_ok=True)
@@ -130,7 +163,8 @@ class Lab:
             log = open(os.path.join(OUT, "worker%d.log" % i), "w")
             self.processes.append(subprocess.Popen(
                 [java, "-Xmx512m", "-jar", jars[0], "--server.port=%d" % port,
-                 "--spring.docker.compose.enabled=false"], env=env, stdout=log, stderr=subprocess.STDOUT))
+                 "--spring.docker.compose.enabled=false"] + external_args(self.external),
+                env=env, stdout=log, stderr=subprocess.STDOUT))
             self.urls.append("http://127.0.0.1:%d" % port)
         for url, process in zip(self.urls, self.processes):
             self._wait(lambda: process.poll() is None and self._healthy(url), 120,
@@ -253,7 +287,7 @@ def pct(value):
 
 
 def evaluate(args):
-    with Lab(args.workers) as lab:
+    with Lab(args.workers, args.external) as lab:
         reports = lab.run([("/api/surveillance/evaluations", {"seeds": [s], "ticks": args.ticks})
                            for s in args.seeds], "seeds")
     runs = [run for report in reports for run in report["runs"]]
@@ -290,7 +324,7 @@ def spoof_pairs(args):
     for seed in args.seeds:
         for layers in (4, 0):
             tasks.append(("/api/bots/runs", {"seed": seed, "ticks": args.ticks, "spoofLayers": layers}))
-    with Lab(args.workers) as lab:
+    with Lab(args.workers, args.external) as lab:
         reports = lab.run(tasks, "markets")
     rows = []
     for i in range(0, len(reports), 2):
@@ -354,6 +388,8 @@ def save(command, data):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--workers", type=int, default=4, help="apps running markets at once (default 4)")
+    parser.add_argument("--external", type=external_detector, action="append", default=[], metavar="NAME=COMMAND",
+                        help="also run an outside detector (repeatable), e.g. guidance='python3 detectors/guidance.py'")
     commands = parser.add_subparsers(dest="command", required=True)
     for name, help_text in (("evaluate", "score the detectors on spoofed and control markets"),
                             ("spoof-pairs", "spoofing vs the honest control, paired by seed")):
