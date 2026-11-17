@@ -4,6 +4,12 @@ name: Public desk
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - docs/red-team/**
+      - frontend/**
+      - .github/workflows/pages.yml
 
 permissions:
   contents: read
