@@ -88,6 +88,35 @@ class SpoofingRulesV2Test {
         assertThat(new SpoofingRulesV2().scan(log())).isEmpty();
     }
 
+    // a market maker posting its two ladders a microsecond apart: v2 reads one side as fakes, v3 doesn't
+    @Test
+    void v3TreatsLaddersPostedMicrosecondsApartAsOneQuote() {
+        for (int e = 0; e < 3; e++) {
+            long at = e * 60_000L;
+            order(11, OrderSide.BUY, 10, at, at + 3_000, "FILLED", 10);
+            for (int level = 0; level < 5; level++) {
+                orders.add(new LoggedOrder(orders.size() + 1, 11, "TEST", OrderSide.SELL, OrderType.LIMIT, 10,
+                        new BigDecimal("100.00"), ++seq, T0.plusMillis(at).plusNanos(1_000), T0.plusMillis(at + 3_000),
+                        "CANCELLED", 0));
+            }
+        }
+        assertThat(new SpoofingRulesV2().scan(log())).extracting(Alert::accountId).containsExactly(11L);
+        assertThat(new SpoofingRulesV3().scan(log())).isEmpty();
+    }
+
+    // the Coscia pattern, fakes 20 ms after the real order, is still a scheme to v3
+    @Test
+    void v3StillCountsFakesPlacedTwentyMillisecondsAfterTheRealOrder() {
+        for (int e = 0; e < 3; e++) {
+            long at = e * 60_000L;
+            order(12, OrderSide.SELL, 10, at, at + 300, "FILLED", 10);
+            for (int i = 0; i < 4; i++) {
+                order(12, OrderSide.BUY, 20, at + 20, at + 300, "CANCELLED", 0);
+            }
+        }
+        assertThat(new SpoofingRulesV3().scan(log())).extracting(Alert::accountId).containsExactly(12L);
+    }
+
     private void order(long account, OrderSide side, int quantity, long placedMs, long endedMs, String end,
             int filled) {
         orders.add(new LoggedOrder(orders.size() + 1, account, "TEST", side, OrderType.LIMIT, quantity,

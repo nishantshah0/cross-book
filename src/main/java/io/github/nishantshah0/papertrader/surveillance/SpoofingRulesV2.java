@@ -47,9 +47,21 @@ public class SpoofingRulesV2 implements Detector {
     static final Duration WINDOW = Duration.ofSeconds(15);
     static final int MIN_EPISODES = 3;
 
+    private final String name;
+    private final Duration oneQuote; // orders placed this close together are one quote, not fakes and a real order
+
+    public SpoofingRulesV2() {
+        this("spoofing-rules-v2", Duration.ZERO);
+    }
+
+    protected SpoofingRulesV2(String name, Duration oneQuote) {
+        this.name = name;
+        this.oneQuote = oneQuote;
+    }
+
     @Override
     public String name() {
-        return "spoofing-rules-v2";
+        return name;
     }
 
     @Override
@@ -78,7 +90,8 @@ public class SpoofingRulesV2 implements Detector {
                         break;
                     }
                     if (fake.side() == real.side() || fake.id() == real.id() || fake.placedAt().isBefore(from)
-                            || fake.placedAt().equals(real.placedAt())) { // the other side of one quote
+                            || Duration.between(fake.placedAt(), real.placedAt()).abs().compareTo(oneQuote) <= 0) {
+                        // the other side of one quote
                         continue;
                     }
                     // resting at the same time as the real order, for more than an instant

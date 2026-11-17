@@ -255,9 +255,9 @@ class BotMarketTest extends ApiTestSupport {
         var trial = finished(result);
         assertThat(trial.get("report").get("tactics").get("fakeSize").asDouble()).isEqualTo(0.06);
         assertThat(trial.get("report").get("tactics").get("restMs").asInt()).isEqualTo(40_000);
-        assertThat(trial.get("scores").size()).isEqualTo(3);
+        assertThat(trial.get("scores").size()).isEqualTo(4);
         var verdicts = trial.get("spoofers");
-        assertThat(verdicts.size()).isEqualTo(6); // two spoofers, three detectors
+        assertThat(verdicts.size()).isEqualTo(8); // two spoofers, four detectors
         for (var verdict : verdicts) {
             assertThat(verdict.get("bot").asString()).startsWith("spoofer-");
             if (verdict.get("flagged").asBoolean()) {
@@ -324,7 +324,7 @@ class BotMarketTest extends ApiTestSupport {
 
         // and the same over HTTP
         assertThat(readList(get("/api/surveillance/detectors"), new tools.jackson.core.type.TypeReference<
-                List<String>>() { })).containsExactly("cancel-ratio", "spoofing-rules", "spoofing-rules-v2");
+                List<String>>() { })).containsExactly("cancel-ratio", "spoofing-rules", "spoofing-rules-v2", "spoofing-rules-v3");
         var alerts = json.readTree(get("/api/surveillance/alerts").getResponse().getContentAsString());
         assertThat(alerts.size()).isEqualTo(2);
         assertThat(alerts.get(0).get("username").asString()).startsWith("trader_");
@@ -351,7 +351,7 @@ class BotMarketTest extends ApiTestSupport {
         assertThat(result).hasStatus(HttpStatus.ACCEPTED);
         var report = finished(result);
         assertThat(report.get("runs").size()).isEqualTo(2);
-        assertThat(report.get("totals").size()).isEqualTo(6); // three detectors, two markets
+        assertThat(report.get("totals").size()).isEqualTo(8); // four detectors, two markets
         assertThat(post("/api/surveillance/evaluations", "{\"seeds\": []}")).hasStatus(HttpStatus.BAD_REQUEST);
     }
 
