@@ -447,13 +447,15 @@ function Run({ name }) {
               [
                 "Held-out flagged",
                 cheater.flaggedSpoofers + " / " + spoofers,
-                "built-in " + builtIn.flaggedSpoofers + " / " + spoofers,
+                builtIn
+                  ? "built-in " + builtIn.flaggedSpoofers + " / " + spoofers
+                  : "no built-in comparison",
                 cheater.flaggedSpoofers ? "negative" : "positive",
               ],
               [
                 "Lift, held out",
                 times(cheater.lift),
-                "built-in " + times(builtIn.lift),
+                builtIn ? "built-in " + times(builtIn.lift) : "",
               ],
               [
                 "Extra shares / market",
@@ -567,26 +569,35 @@ function Run({ name }) {
               </thead>
               <tbody>
                 {[
-                  ["Claude's tactics", cheater],
+                  [
+                    run.searcher === "random"
+                      ? "Best random draw"
+                      : "Claude's tactics",
+                    cheater,
+                  ],
                   ["Built-in", builtIn],
-                ].map(([label, h]) => (
-                  <tr key={label}>
-                    <td>{label}</td>
-                    <td className={h.flaggedSpoofers ? "negative" : "positive"}>
-                      {h.flaggedSpoofers} / {spoofers}
-                    </td>
-                    <td>
-                      {num(h.shares)} / {num(h.controlShares)}
-                    </td>
-                    <td>{times(h.lift)}</td>
-                    <td>{interval(h.paired.shares)}</td>
-                    <td>{plusMinus(h.paired.fillPoints[0], 1)} pts</td>
-                    <td>${interval(h.paired.pnl)}</td>
-                    <td>
-                      {h.paired.better} / {h.paired.seeds}
-                    </td>
-                  </tr>
-                ))}
+                ]
+                  .filter(([, h]) => h)
+                  .map(([label, h]) => (
+                    <tr key={label}>
+                      <td>{label}</td>
+                      <td
+                        className={h.flaggedSpoofers ? "negative" : "positive"}
+                      >
+                        {h.flaggedSpoofers} / {spoofers}
+                      </td>
+                      <td>
+                        {num(h.shares)} / {num(h.controlShares)}
+                      </td>
+                      <td>{times(h.lift)}</td>
+                      <td>{interval(h.paired.shares)}</td>
+                      <td>{plusMinus(h.paired.fillPoints[0], 1)} pts</td>
+                      <td>${interval(h.paired.pnl)}</td>
+                      <td>
+                        {h.paired.better} / {h.paired.seeds}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>

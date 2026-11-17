@@ -1,0 +1,1121 @@
+{
+ "model": null,
+ "via": null,
+ "searcher": "random",
+ "blind": false,
+ "searchSeed": 2,
+ "stopOnSuccess": true,
+ "detector": "spoofing-rules",
+ "trainSeeds": [
+  301,
+  302,
+  303
+ ],
+ "heldOutSeeds": [
+  401,
+  402,
+  403,
+  404,
+  405,
+  406,
+  407,
+  408,
+  409,
+  410
+ ],
+ "ticks": 240,
+ "trials": [
+  {
+   "layers": 4,
+   "tactics": {
+    "fakeSize": 0.08,
+    "fakeOffsetCents": 1,
+    "fakeGapCents": 1,
+    "realSize": 0.02,
+    "realFirst": false,
+    "stepMinMs": 1000,
+    "stepMaxMs": 3000,
+    "restMs": 40000
+   },
+   "hypothesis": "the built-in spoofer, run by the harness",
+   "summary": {
+    "rows": [
+     {
+      "seed": 301,
+      "spoofed": {
+       "shares": 166,
+       "fillRate": 0.3103448275862069,
+       "pnl": 278.73,
+       "flagged": [
+        "spoofer-01",
+        "spoofer-00"
+       ],
+       "alerts": [
+        "59 episodes: 226 orders cancelled within 10s while a far smaller order traded the other side",
+        "86 episodes: 295 orders cancelled within 10s while a far smaller order traded the other side"
+       ],
+       "episodes": 146,
+       "fakes": 564,
+       "fakesFilled": 21
+      },
+      "control": {
+       "shares": 55,
+       "fillRate": 0.16030534351145037,
+       "pnl": -10.86,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 302,
+      "spoofed": {
+       "shares": 97,
+       "fillRate": 0.2119205298013245,
+       "pnl": -197.09,
+       "flagged": [
+        "spoofer-00",
+        "spoofer-01"
+       ],
+       "alerts": [
+        "82 episodes: 272 orders cancelled within 10s while a far smaller order traded the other side",
+        "69 episodes: 199 orders cancelled within 10s while a far smaller order traded the other side"
+       ],
+       "episodes": 153,
+       "fakes": 548,
+       "fakesFilled": 16
+      },
+      "control": {
+       "shares": 73,
+       "fillRate": 0.1695906432748538,
+       "pnl": -38.64,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 303,
+      "spoofed": {
+       "shares": 159,
+       "fillRate": 0.2302158273381295,
+       "pnl": 113.5,
+       "flagged": [
+        "spoofer-01",
+        "spoofer-00"
+       ],
+       "alerts": [
+        "70 episodes: 262 orders cancelled within 10s while a far smaller order traded the other side",
+        "68 episodes: 136 orders cancelled within 10s while a far smaller order traded the other side"
+       ],
+       "episodes": 139,
+       "fakes": 469,
+       "fakesFilled": 17
+      },
+      "control": {
+       "shares": 109,
+       "fillRate": 0.17365269461077845,
+       "pnl": 28.08,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     }
+    ],
+    "flaggedMarkets": 3,
+    "flaggedSpoofers": 6,
+    "controlFlagged": 0,
+    "lift": 1.780590717299578,
+    "shares": 422,
+    "controlShares": 237
+   }
+  },
+  {
+   "layers": 1,
+   "tactics": {
+    "fakeSize": 0.0068,
+    "fakeOffsetCents": 4,
+    "fakeGapCents": 2,
+    "realSize": 0.0322,
+    "realFirst": false,
+    "stepMinMs": 24068,
+    "stepMaxMs": 25439,
+    "restMs": 13810
+   },
+   "hypothesis": "random draw",
+   "summary": {
+    "rows": [
+     {
+      "seed": 301,
+      "spoofed": {
+       "shares": 461,
+       "fillRate": 0.6846846846846847,
+       "pnl": -142.95,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 111,
+       "fakes": 111,
+       "fakesFilled": 74
+      },
+      "control": {
+       "shares": 566,
+       "fillRate": 0.7428571428571429,
+       "pnl": -174.56,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 302,
+      "spoofed": {
+       "shares": 465,
+       "fillRate": 0.7631578947368421,
+       "pnl": -75.79,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 114,
+       "fakes": 114,
+       "fakesFilled": 68
+      },
+      "control": {
+       "shares": 481,
+       "fillRate": 0.7394957983193278,
+       "pnl": 15.07,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 303,
+      "spoofed": {
+       "shares": 720,
+       "fillRate": 0.7339449541284404,
+       "pnl": -145.9,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 112,
+       "fakes": 112,
+       "fakesFilled": 74
+      },
+      "control": {
+       "shares": 700,
+       "fillRate": 0.7043478260869566,
+       "pnl": -275.69,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     }
+    ],
+    "flaggedMarkets": 0,
+    "flaggedSpoofers": 0,
+    "controlFlagged": 0,
+    "lift": 0.9421866056096165,
+    "shares": 1646,
+    "controlShares": 1747
+   }
+  },
+  {
+   "layers": 3,
+   "tactics": {
+    "fakeSize": 0.1499,
+    "fakeOffsetCents": 12,
+    "fakeGapCents": 11,
+    "realSize": 0.0362,
+    "realFirst": false,
+    "stepMinMs": 239,
+    "stepMaxMs": 1442,
+    "restMs": 441046
+   },
+   "hypothesis": "random draw",
+   "summary": {
+    "rows": [
+     {
+      "seed": 301,
+      "spoofed": {
+       "shares": 10,
+       "fillRate": 0.2857142857142857,
+       "pnl": 10.42,
+       "flagged": [
+        "spoofer-01",
+        "spoofer-00"
+       ],
+       "alerts": [
+        "3 episodes: 3 orders cancelled within 10s while a far smaller order traded the other side",
+        "11 episodes: 21 orders cancelled within 10s while a far smaller order traded the other side"
+       ],
+       "episodes": 14,
+       "fakes": 32,
+       "fakesFilled": 0
+      },
+      "control": {
+       "shares": 3,
+       "fillRate": 0.0625,
+       "pnl": 2.14,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 302,
+      "spoofed": {
+       "shares": 3,
+       "fillRate": 0.08333333333333333,
+       "pnl": -2.19,
+       "flagged": [
+        "spoofer-00",
+        "spoofer-01"
+       ],
+       "alerts": [
+        "13 episodes: 23 orders cancelled within 10s while a far smaller order traded the other side",
+        "11 episodes: 16 orders cancelled within 10s while a far smaller order traded the other side"
+       ],
+       "episodes": 24,
+       "fakes": 50,
+       "fakesFilled": 0
+      },
+      "control": {
+       "shares": 0,
+       "fillRate": 0.0,
+       "pnl": 0.0,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 303,
+      "spoofed": {
+       "shares": 16,
+       "fillRate": 0.3,
+       "pnl": 8.03,
+       "flagged": [
+        "spoofer-01",
+        "spoofer-00"
+       ],
+       "alerts": [
+        "15 episodes: 25 orders cancelled within 10s while a far smaller order traded the other side",
+        "5 episodes: 7 orders cancelled within 10s while a far smaller order traded the other side"
+       ],
+       "episodes": 20,
+       "fakes": 45,
+       "fakesFilled": 0
+      },
+      "control": {
+       "shares": 6,
+       "fillRate": 0.15,
+       "pnl": -3.41,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     }
+    ],
+    "flaggedMarkets": 3,
+    "flaggedSpoofers": 6,
+    "controlFlagged": 0,
+    "lift": 3.2222222222222223,
+    "shares": 29,
+    "controlShares": 9
+   }
+  },
+  {
+   "layers": 1,
+   "tactics": {
+    "fakeSize": 0.0967,
+    "fakeOffsetCents": 4,
+    "fakeGapCents": 16,
+    "realSize": 0.0404,
+    "realFirst": true,
+    "stepMinMs": 2474,
+    "stepMaxMs": 22463,
+    "restMs": 10989
+   },
+   "hypothesis": "random draw",
+   "summary": {
+    "rows": [
+     {
+      "seed": 301,
+      "spoofed": {
+       "shares": 1008,
+       "fillRate": 0.7435897435897436,
+       "pnl": -464.33,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 195,
+       "fakes": 188,
+       "fakesFilled": 51
+      },
+      "control": {
+       "shares": 1195,
+       "fillRate": 0.7268292682926829,
+       "pnl": -240.15,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 302,
+      "spoofed": {
+       "shares": 1069,
+       "fillRate": 0.6958762886597938,
+       "pnl": -340.65,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 194,
+       "fakes": 186,
+       "fakesFilled": 53
+      },
+      "control": {
+       "shares": 927,
+       "fillRate": 0.6974358974358974,
+       "pnl": -349.79,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 303,
+      "spoofed": {
+       "shares": 1597,
+       "fillRate": 0.7029702970297029,
+       "pnl": -306.08,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 202,
+       "fakes": 181,
+       "fakesFilled": 49
+      },
+      "control": {
+       "shares": 1394,
+       "fillRate": 0.678391959798995,
+       "pnl": -196.57,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     }
+    ],
+    "flaggedMarkets": 0,
+    "flaggedSpoofers": 0,
+    "controlFlagged": 0,
+    "lift": 1.0449374288964732,
+    "shares": 3674,
+    "controlShares": 3516
+   }
+  },
+  {
+   "layers": 4,
+   "tactics": {
+    "fakeSize": 0.0054,
+    "fakeOffsetCents": 4,
+    "fakeGapCents": 2,
+    "realSize": 0.0162,
+    "realFirst": false,
+    "stepMinMs": 486,
+    "stepMaxMs": 7839,
+    "restMs": 11941
+   },
+   "hypothesis": "random draw",
+   "summary": {
+    "rows": [
+     {
+      "seed": 301,
+      "spoofed": {
+       "shares": 308,
+       "fillRate": 0.3006535947712418,
+       "pnl": -430.01,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 310,
+       "fakes": 1236,
+       "fakesFilled": 217
+      },
+      "control": {
+       "shares": 331,
+       "fillRate": 0.3057142857142857,
+       "pnl": -49.84,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 302,
+      "spoofed": {
+       "shares": 371,
+       "fillRate": 0.3575268817204301,
+       "pnl": 17.38,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 374,
+       "fakes": 1496,
+       "fakesFilled": 275
+      },
+      "control": {
+       "shares": 277,
+       "fillRate": 0.3042168674698795,
+       "pnl": -85.0,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 303,
+      "spoofed": {
+       "shares": 443,
+       "fillRate": 0.2918918918918919,
+       "pnl": -0.28,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 370,
+       "fakes": 1480,
+       "fakesFilled": 213
+      },
+      "control": {
+       "shares": 473,
+       "fillRate": 0.3064516129032258,
+       "pnl": -37.72,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     }
+    ],
+    "flaggedMarkets": 0,
+    "flaggedSpoofers": 0,
+    "controlFlagged": 0,
+    "lift": 1.0379278445883442,
+    "shares": 1122,
+    "controlShares": 1081
+   }
+  },
+  {
+   "layers": 7,
+   "tactics": {
+    "fakeSize": 0.0608,
+    "fakeOffsetCents": 35,
+    "fakeGapCents": 10,
+    "realSize": 0.0308,
+    "realFirst": true,
+    "stepMinMs": 17600,
+    "stepMaxMs": 29697,
+    "restMs": 499961
+   },
+   "hypothesis": "random draw",
+   "summary": {
+    "rows": [
+     {
+      "seed": 301,
+      "spoofed": {
+       "shares": 88,
+       "fillRate": 0.7857142857142857,
+       "pnl": 33.25,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 14,
+       "fakes": 82,
+       "fakesFilled": 0
+      },
+      "control": {
+       "shares": 99,
+       "fillRate": 0.6923076923076923,
+       "pnl": 52.15,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 302,
+      "spoofed": {
+       "shares": 85,
+       "fillRate": 0.8823529411764706,
+       "pnl": -130.06,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 17,
+       "fakes": 84,
+       "fakesFilled": 7
+      },
+      "control": {
+       "shares": 92,
+       "fillRate": 0.8823529411764706,
+       "pnl": 47.68,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 303,
+      "spoofed": {
+       "shares": 89,
+       "fillRate": 0.75,
+       "pnl": -16.6,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 16,
+       "fakes": 83,
+       "fakesFilled": 7
+      },
+      "control": {
+       "shares": 109,
+       "fillRate": 0.6111111111111112,
+       "pnl": 24.86,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     }
+    ],
+    "flaggedMarkets": 0,
+    "flaggedSpoofers": 0,
+    "controlFlagged": 0,
+    "lift": 0.8733333333333333,
+    "shares": 262,
+    "controlShares": 300
+   }
+  },
+  {
+   "layers": 7,
+   "tactics": {
+    "fakeSize": 0.0569,
+    "fakeOffsetCents": 6,
+    "fakeGapCents": 5,
+    "realSize": 0.0155,
+    "realFirst": false,
+    "stepMinMs": 448,
+    "stepMaxMs": 3679,
+    "restMs": 267830
+   },
+   "hypothesis": "random draw",
+   "summary": {
+    "rows": [
+     {
+      "seed": 301,
+      "spoofed": {
+       "shares": 27,
+       "fillRate": 0.36,
+       "pnl": 0.8,
+       "flagged": [
+        "spoofer-01",
+        "spoofer-00"
+       ],
+       "alerts": [
+        "10 episodes: 45 orders cancelled within 10s while a far smaller order traded the other side",
+        "15 episodes: 78 orders cancelled within 10s while a far smaller order traded the other side"
+       ],
+       "episodes": 25,
+       "fakes": 141,
+       "fakesFilled": 4
+      },
+      "control": {
+       "shares": 13,
+       "fillRate": 0.16,
+       "pnl": 10.05,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 302,
+      "spoofed": {
+       "shares": 37,
+       "fillRate": 0.34285714285714286,
+       "pnl": 19.72,
+       "flagged": [
+        "spoofer-00",
+        "spoofer-01"
+       ],
+       "alerts": [
+        "20 episodes: 112 orders cancelled within 10s while a far smaller order traded the other side",
+        "15 episodes: 87 orders cancelled within 10s while a far smaller order traded the other side"
+       ],
+       "episodes": 35,
+       "fakes": 215,
+       "fakesFilled": 1
+      },
+      "control": {
+       "shares": 23,
+       "fillRate": 0.2571428571428571,
+       "pnl": 13.28,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 303,
+      "spoofed": {
+       "shares": 61,
+       "fillRate": 0.3939393939393939,
+       "pnl": 14.52,
+       "flagged": [
+        "spoofer-01",
+        "spoofer-00"
+       ],
+       "alerts": [
+        "24 episodes: 125 orders cancelled within 10s while a far smaller order traded the other side",
+        "9 episodes: 38 orders cancelled within 10s while a far smaller order traded the other side"
+       ],
+       "episodes": 33,
+       "fakes": 185,
+       "fakesFilled": 4
+      },
+      "control": {
+       "shares": 47,
+       "fillRate": 0.30303030303030304,
+       "pnl": 15.08,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     }
+    ],
+    "flaggedMarkets": 3,
+    "flaggedSpoofers": 6,
+    "controlFlagged": 0,
+    "lift": 1.5060240963855422,
+    "shares": 125,
+    "controlShares": 83
+   }
+  },
+  {
+   "layers": 8,
+   "tactics": {
+    "fakeSize": 0.1066,
+    "fakeOffsetCents": 6,
+    "fakeGapCents": 5,
+    "realSize": 0.0416,
+    "realFirst": false,
+    "stepMinMs": 1178,
+    "stepMaxMs": 5692,
+    "restMs": 14459
+   },
+   "hypothesis": "random draw",
+   "summary": {
+    "rows": [
+     {
+      "seed": 301,
+      "spoofed": {
+       "shares": 722,
+       "fillRate": 0.36363636363636365,
+       "pnl": -50.19,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 299,
+       "fakes": 914,
+       "fakesFilled": 44
+      },
+      "control": {
+       "shares": 417,
+       "fillRate": 0.27666666666666667,
+       "pnl": -142.12,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 302,
+      "spoofed": {
+       "shares": 465,
+       "fillRate": 0.3076923076923077,
+       "pnl": -435.72,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 305,
+       "fakes": 904,
+       "fakesFilled": 49
+      },
+      "control": {
+       "shares": 448,
+       "fillRate": 0.27358490566037735,
+       "pnl": -73.46,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     },
+     {
+      "seed": 303,
+      "spoofed": {
+       "shares": 1116,
+       "fillRate": 0.39655172413793105,
+       "pnl": 193.9,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 298,
+       "fakes": 936,
+       "fakesFilled": 41
+      },
+      "control": {
+       "shares": 501,
+       "fillRate": 0.2542857142857143,
+       "pnl": -32.95,
+       "flagged": [],
+       "alerts": [],
+       "episodes": 0,
+       "fakes": 0,
+       "fakesFilled": 0
+      }
+     }
+    ],
+    "flaggedMarkets": 0,
+    "flaggedSpoofers": 0,
+    "controlFlagged": 0,
+    "lift": 1.6859443631039532,
+    "shares": 2303,
+    "controlShares": 1366
+   }
+  }
+ ],
+ "final": {
+  "layers": 8,
+  "tactics": {
+   "fakeSize": 0.1066,
+   "fakeOffsetCents": 6,
+   "fakeGapCents": 5,
+   "realSize": 0.0416,
+   "realFirst": false,
+   "stepMinMs": 1178,
+   "stepMaxMs": 5692,
+   "restMs": 14459
+  },
+  "reasoning": "stopped at the first trial that met the goal"
+ },
+ "heldOut": {
+  "cheater": {
+   "rows": [
+    {
+     "seed": 401,
+     "spoofed": {
+      "shares": 968,
+      "fillRate": 0.35984848484848486,
+      "pnl": -63.73,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 275,
+      "fakes": 786,
+      "fakesFilled": 43
+     },
+     "control": {
+      "shares": 1045,
+      "fillRate": 0.310580204778157,
+      "pnl": -142.34,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 0,
+      "fakes": 0,
+      "fakesFilled": 0
+     }
+    },
+    {
+     "seed": 402,
+     "spoofed": {
+      "shares": 810,
+      "fillRate": 0.3907563025210084,
+      "pnl": -93.1,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 251,
+      "fakes": 795,
+      "fakesFilled": 39
+     },
+     "control": {
+      "shares": 560,
+      "fillRate": 0.29152542372881357,
+      "pnl": 55.24,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 0,
+      "fakes": 0,
+      "fakesFilled": 0
+     }
+    },
+    {
+     "seed": 403,
+     "spoofed": {
+      "shares": 683,
+      "fillRate": 0.3173076923076923,
+      "pnl": -107.83,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 215,
+      "fakes": 636,
+      "fakesFilled": 33
+     },
+     "control": {
+      "shares": 530,
+      "fillRate": 0.27205882352941174,
+      "pnl": -298.93,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 0,
+      "fakes": 0,
+      "fakesFilled": 0
+     }
+    },
+    {
+     "seed": 404,
+     "spoofed": {
+      "shares": 746,
+      "fillRate": 0.3411764705882353,
+      "pnl": 279.29,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 267,
+      "fakes": 908,
+      "fakesFilled": 46
+     },
+     "control": {
+      "shares": 626,
+      "fillRate": 0.2676923076923077,
+      "pnl": -111.34,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 0,
+      "fakes": 0,
+      "fakesFilled": 0
+     }
+    },
+    {
+     "seed": 405,
+     "spoofed": {
+      "shares": 796,
+      "fillRate": 0.36524822695035464,
+      "pnl": 63.54,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 290,
+      "fakes": 1057,
+      "fakesFilled": 47
+     },
+     "control": {
+      "shares": 517,
+      "fillRate": 0.2912912912912913,
+      "pnl": -80.42,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 0,
+      "fakes": 0,
+      "fakesFilled": 0
+     }
+    },
+    {
+     "seed": 406,
+     "spoofed": {
+      "shares": 589,
+      "fillRate": 0.3591549295774648,
+      "pnl": -127.35,
+      "flagged": [
+       "spoofer-00"
+      ],
+      "alerts": [
+       "53 episodes: 161 orders cancelled within 10s while a far smaller order traded the other side"
+      ],
+      "episodes": 293,
+      "fakes": 749,
+      "fakesFilled": 38
+     },
+     "control": {
+      "shares": 301,
+      "fillRate": 0.2182410423452769,
+      "pnl": 14.06,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 0,
+      "fakes": 0,
+      "fakesFilled": 0
+     }
+    },
+    {
+     "seed": 407,
+     "spoofed": {
+      "shares": 669,
+      "fillRate": 0.4103585657370518,
+      "pnl": -758.84,
+      "flagged": [
+       "spoofer-01"
+      ],
+      "alerts": [
+       "25 episodes: 46 orders cancelled within 10s while a far smaller order traded the other side"
+      ],
+      "episodes": 256,
+      "fakes": 732,
+      "fakesFilled": 53
+     },
+     "control": {
+      "shares": 250,
+      "fillRate": 0.2703583061889251,
+      "pnl": 6.42,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 0,
+      "fakes": 0,
+      "fakesFilled": 0
+     }
+    },
+    {
+     "seed": 408,
+     "spoofed": {
+      "shares": 535,
+      "fillRate": 0.3236994219653179,
+      "pnl": -144.25,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 178,
+      "fakes": 510,
+      "fakesFilled": 31
+     },
+     "control": {
+      "shares": 700,
+      "fillRate": 0.2874617737003058,
+      "pnl": -231.5,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 0,
+      "fakes": 0,
+      "fakesFilled": 0
+     }
+    },
+    {
+     "seed": 409,
+     "spoofed": {
+      "shares": 1051,
+      "fillRate": 0.4099616858237548,
+      "pnl": 125.36,
+      "flagged": [
+       "spoofer-00"
+      ],
+      "alerts": [
+       "15 episodes: 38 orders cancelled within 10s while a far smaller order traded the other side"
+      ],
+      "episodes": 269,
+      "fakes": 1033,
+      "fakesFilled": 32
+     },
+     "control": {
+      "shares": 624,
+      "fillRate": 0.30844155844155846,
+      "pnl": -124.76,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 0,
+      "fakes": 0,
+      "fakesFilled": 0
+     }
+    },
+    {
+     "seed": 410,
+     "spoofed": {
+      "shares": 656,
+      "fillRate": 0.33175355450236965,
+      "pnl": -592.29,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 223,
+      "fakes": 614,
+      "fakesFilled": 42
+     },
+     "control": {
+      "shares": 929,
+      "fillRate": 0.2857142857142857,
+      "pnl": -63.79,
+      "flagged": [],
+      "alerts": [],
+      "episodes": 0,
+      "fakes": 0,
+      "fakesFilled": 0
+     }
+    }
+   ],
+   "flaggedMarkets": 3,
+   "flaggedSpoofers": 3,
+   "controlFlagged": 0,
+   "lift": 1.2336402499177903,
+   "shares": 7503,
+   "controlShares": 6082,
+   "paired": {
+    "shares": [
+     142.1,
+     -30.620796239595848,
+     314.82079623959584
+    ],
+    "fillPoints": [
+     8.059003174114013,
+     5.294842547645546,
+     10.82316380058248
+    ],
+    "pnl": [
+     -44.184,
+     -302.4883775797158,
+     214.12037757971578
+    ],
+    "better": 7,
+    "seeds": 10
+   }
+  }
+ },
+ "firstSuccess": 7,
+ "name": "20261116-202822-random",
+ "status": {
+  "phase": "done",
+  "updatedAt": 1794901664.0384572
+ },
+ "budget": 7
+}
