@@ -119,7 +119,11 @@ final class SaraoLayerer extends Bot {
 
     // each fake belongs AWAY_CENTS + i behind the best price on its side
     private void reprice(BotMarket market) {
-        BigDecimal touch = (fakeSide == OrderSide.BUY ? market.bestBid(symbol) : market.bestAsk(symbol)).orElseThrow();
+        var best = fakeSide == OrderSide.BUY ? market.bestBid(symbol) : market.bestAsk(symbol);
+        if (best.isEmpty()) {
+            return;
+        }
+        BigDecimal touch = best.get();
         int size = Math.max(1, (int) (market.startingCash.doubleValue() * FAKE_SIZE / touch.doubleValue()));
         for (int i = 0; i < layers; i++) {
             BigDecimal away = BigDecimal.valueOf(AWAY_CENTS + i, 2);
@@ -161,7 +165,13 @@ final class SaraoLayerer extends Bot {
             market.cancel(accountId, real);
             real = null;
         }
-        BigDecimal bid = market.bestBid(symbol).orElseThrow(), ask = market.bestAsk(symbol).orElseThrow();
+        // cancelling its own real order can empty that side of a thin book
+        var bestBid = market.bestBid(symbol);
+        var bestAsk = market.bestAsk(symbol);
+        if (bestBid.isEmpty() || bestAsk.isEmpty()) {
+            return;
+        }
+        BigDecimal bid = bestBid.get(), ask = bestAsk.get();
         OrderSide realSide = fakeSide == OrderSide.BUY ? OrderSide.SELL : OrderSide.BUY;
         BigDecimal one = BigDecimal.valueOf(1, 2);
         BigDecimal price = realSide == OrderSide.SELL ? ask.subtract(one).max(bid.add(one))
