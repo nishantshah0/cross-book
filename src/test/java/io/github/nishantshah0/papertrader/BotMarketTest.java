@@ -211,7 +211,7 @@ class BotMarketTest extends ApiTestSupport {
         var tactics = new SpoofTactics(0.04, 3, 2, 0.01, true, 4_000, 5_000, 20_000);
         BotRunReport report = runner.run(new BotRunRequest(21L, 40, NOISE, MAKERS, 10, VALUE, 2, 3, 2, SYMBOLS,
                 tactics));
-        assertThat(report.tactics()).isEqualTo(tactics);
+        assertThat(report.tactics()).isEqualTo(tactics.withDefaults()); // the style left out is filled in
         record Labelled(long account, int episode, String role, long id, double value, String status,
                 double lifeSeconds) {
         }
