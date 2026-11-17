@@ -2,8 +2,8 @@
 
 # CrossBook
 
-**A stock exchange engine with a bot market and planted cheaters, for testing market surveillance.**<br>
-Run 142 simulated traders, spoofers included, and replay the market to the millisecond, or trade in it yourself from a full terminal. No real money involved.
+**A stock exchange engine: price-time matching, books that provably balance, and markets that replay to the millisecond.**<br>
+Trade in it from a full terminal. Or run 142 simulated traders through it, cheaters included, and use it as a lab for market surveillance. No real money involved.
 
 [![Build and test](https://github.com/nishantshah0/cross-book/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nishantshah0/cross-book/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -12,15 +12,11 @@ Run 142 simulated traders, spoofers included, and replay the market to the milli
 ![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
 
-[**Live surveillance desk**](https://nishantshah0.github.io/cross-book/) · [Quick start](#quick-start) · [Catching the spoofers](#catching-the-spoofers) · [How matching works](#how-matching-works) · [Architecture](#architecture) · [API](#api) · [Design notes](docs/architecture.md)
+[Quick start](#quick-start) · [How matching works](#how-matching-works) · [Surveillance lab](#surveillance-lab) · [Architecture](#architecture) · [API](#api) · [Design notes](docs/architecture.md)
 
 <img src="docs/dashboard.png" alt="The trading terminal: watchlist, chart, order book and order ticket" width="900">
 
 <sub>The trading terminal. The order book shows other traders' resting orders around the house's bid and ask; click a price to use it as your limit. Fills, cash and positions update over the WebSocket.</sub>
-
-<img src="docs/media/red-team-replay.gif" alt="Replay of an AI red-team run on the surveillance desk" width="900">
-
-<sub>The <a href="https://nishantshah0.github.io/cross-book/">surveillance desk</a> replaying an AI red-team run: Claude (Opus 5.5) probes the spoofing detector one trial at a time, then its tactics are graded on 10 markets it never saw. <a href="docs/media/red-team-replay.mp4">MP4</a>.</sub>
 
 </div>
 
@@ -30,13 +26,12 @@ Run 142 simulated traders, spoofers included, and replay the market to the milli
 - **A simulated market maker.** The house quotes a bid and an ask around the feed price, so a market order always has something to trade with, even if you're the only user.
 - **One matcher thread per symbol.** Symbols match in parallel and nothing within a symbol interleaves. Postgres stays the source of truth.
 - **Books that always balance.** The house keeps its own books, so every dollar and share a user gains, the house gives up. A ledger audit proves nothing was created or destroyed, and it runs after every integration test.
-- **Surveillance that's graded honestly.** A rule-based spoofing detector caught 10 of 10 spoofers on five unseen seeds with no false alarms across 1,410 honest accounts, against a cancel-ratio baseline that raised 107. Every alert cites the event-log lines behind it.
-- **A bot market with a planted cheater.** One command runs 142 simulated traders for an hour of market time in about a minute, spoofers included. Over 30 seeds against an honest control, the fake orders got the spoofer's real orders traded on every seed (2.5 times the shares), though a profit isn't proven yet. The same seed gives the same market down to the millisecond, and only a separate answer key says who cheated, order by order.
 - **A complete audit trail.** Every order event (placed, partly filled, filled, cancelled, rejected) is logged with a sequence number in the same transaction as the change, so the log never disagrees with the books.
 - **Safe under concurrency.** Accounts are locked in ID order so trades can't deadlock, the book changes only after the transaction commits, and retries with an `Idempotency-Key` never place the same order twice.
 - **A full trading terminal.** Everything on one screen: a searchable watchlist, a chart with a crosshair and time ranges, an order book ladder you can click to set a limit price, the order ticket, positions and order history, and a leaderboard.
 - **A home page that proves it.** A live demo places a real order and shows the events it created, next to the running event log and ledger audit.
 - **Live everywhere.** Fills, quotes and portfolio changes are pushed over STOMP WebSockets to every open tab, with a polling fallback.
+- **A surveillance lab on top.** One command runs 142 simulated traders, spoofers included, with an answer key that labels every fake order. Spoofing detectors read only the event log and are graded against it, and an AI agent (Claude) tries to spoof past them. See [Surveillance lab](#surveillance-lab).
 - **Tested against the real thing.** The backend tests run on Postgres through Testcontainers, and Playwright and Cypress drive the packaged app in CI.
 
 > [!NOTE]
@@ -121,6 +116,14 @@ Set `MARKET_MODE=book` and the house is gone: orders only trade with each other,
 - Positions are valued at the last trade, not the feed. Buying through thin asks moves the price as far as the book lets it, and it stays there until someone trades it back.
 - A book market has no other source of shares, so a simulated run starts by allocating them (see [Simulated time](#simulated-time)).
 
+**Reservations.** Open limit orders reserve what they still need: a buy holds its limit price times its remaining shares, and a sell holds its remaining shares. New orders can only use buying power and shares that aren't already reserved, so a resting order stays funded until it fills or is cancelled. Cancelling a partly filled order keeps what already filled.
+
+**Simplifications.** Fills are whole-share and long-only, with no commissions, shorting, or slippage beyond the house spread.
+
+## Surveillance lab
+
+The exchange logs every order event in the same transaction as the change, and on the simulated clock a market replays exactly from its seed. That makes it a testbed for market surveillance: run a market with planted cheaters, run detectors on its event log, and grade them against an answer key that says who cheated, order by order. Live: the [surveillance desk](https://nishantshah0.github.io/cross-book/).
+
 ### Bot markets
 
 One command runs a whole market of simulated traders, in book mode on the simulated clock:
@@ -197,27 +200,27 @@ Both were found by tracing which bots held what, not by tuning numbers until the
 
 What's still simplified: noise traders are purely random, with no momentum or herding. Nobody can short. Bots act one at a time, which is what makes a run exact and caps it at about 700 actions a second. Layering is the only cheat so far.
 
-**Reservations.** Open limit orders reserve what they still need: a buy holds its limit price times its remaining shares, and a sell holds its remaining shares. New orders can only use buying power and shares that aren't already reserved, so a resting order stays funded until it fills or is cancelled. Cancelling a partly filled order keeps what already filled.
+### Catching the spoofers
 
-**Simplifications.** Fills are whole-share and long-only, with no commissions, shorting, or slippage beyond the house spread.
-
-## Catching the spoofers
-
-Two detectors read the order event log, and only the event log. A test fails if the detector code ever mentions the answer key or the bots. Grading happens in a separate package that holds the alerts and the answer key side by side.
+Three detectors read the order event log, and only the event log. A test fails if the detector code ever mentions the answer key or the bots. Grading happens in a separate package that holds the alerts and the answer key side by side.
 
 - **Spoofing rules.** These follow how exchange rules describe spoofing: large orders with no intent to trade, while the same trader trades a smaller order the other way. An order is suspect if it's a limit order that was cancelled less than a quarter filled within 10 seconds, and the same account placed an order at least 3 times smaller on the other side of that stock while it rested. That other order has to come strictly later, so a market maker posting its bid and ask together doesn't count. Three or more such episodes raise an alert, and the alert cites the exact event-log lines behind it.
+- **Spoofing rules v2.** The patch after the AI red team got past v1 (below). Instead of one order at a time, it adds up all of an account's cancelled orders on the other side within 15 seconds of an order, held up to 60 seconds, placed before or after it but not in the same instant, and asks whether together they're at least 3 times that order.
 - **Cancel-ratio baseline.** The naive check every rule has to beat: flag anyone who cancels at least 80% of their limit orders.
 
-The rules' thresholds were set on seeds 1 to 3 and then frozen. Scored on five seeds they never saw (101 to 105), with one hour of market time each and every spoofed market paired with its control market:
+v1's thresholds were set on seeds 1 to 3 and then frozen. Scored on five seeds it never saw (101 to 105), with one hour of market time each and every spoofed market paired with its control market:
 
 | Detector | Spoofers caught | False alarms | Precision | Fake orders found |
 | --- | ---: | ---: | ---: | ---: |
 | **Spoofing rules** | **10 / 10** | **0** | **100%** | **87%** (2,278 of 2,617, none wrong) |
+| Spoofing rules v2* | 10 / 10 | 0 | 100% | 97% (2,543 of 2,617) |
 | Cancel-ratio baseline | 10 / 10 | 107 | 9% | – |
 
-The baseline's 107 false alarms are 77 honest market makers, which re-quote all day, and all 30 lookalikes and control spoofers, which run the spoofer's code with the fakes turned off. The rules flagged none of the 1,410 honest accounts across the ten markets, the lookalikes and control spoofers included. On seed 101 they missed 47 fakes. 27 were less than 3 times the real order, usually a spoofer's last fake ask, cut short when it ran low on shares. 12 got a quarter or more filled before the cancel, and 8 came from schemes where no real order was placed. An account is still caught by its other episodes, so these only cost order-level recall.
+\* Not a held-out result: v2's fix for market makers was found on seed 101, one of these five.
 
-What this doesn't show yet: the rules were written knowing what this spoofer does. Held-out seeds test whether they hold up in different markets, not against a cheater who changes how it spoofs. That's the next step: a cheater that adapts to the detector.
+The baseline's 107 false alarms are 77 honest market makers, which re-quote all day, and all 30 lookalikes and control spoofers, which run the spoofer's code with the fakes turned off. v1 flagged none of the 1,410 honest accounts across the ten markets, the lookalikes and control spoofers included. On seed 101 it missed 47 fakes. 27 were less than 3 times the real order, usually a spoofer's last fake ask, cut short when it ran low on shares. 12 got a quarter or more filled before the cancel, and 8 came from schemes where no real order was placed. An account is still caught by its other episodes, so these only cost order-level recall.
+
+The catch: the rules were written knowing what this spoofer does. Held-out seeds test whether they hold up in different markets, not against a cheater who changes how it spoofs. That's what the AI red team is for.
 
 ```bash
 curl -X POST localhost:8080/api/surveillance/evaluations -H 'Content-Type: application/json' \
@@ -226,6 +229,45 @@ curl localhost:8080/api/jobs/1                                          # its st
 curl 'localhost:8080/api/surveillance/alerts?detector=spoofing-rules'   # on the market as it stands
 curl 'localhost:8080/api/surveillance/score?detector=spoofing-rules'    # the same, graded
 ```
+
+### The AI red team
+
+The detectors above were written knowing how the spoofer works. So the last test is a cheater that adapts: Claude (Opus 5.5) gets control of the spoofer and tries to get it past the detector without the fakes stopping working.
+
+<img src="docs/media/red-team-replay.gif" alt="Replay of an AI red-team run on the surveillance desk" width="900">
+
+<sub>The <a href="https://nishantshah0.github.io/cross-book/">public surveillance desk</a> replaying the first run. <a href="docs/media/red-team-replay.mp4">MP4</a>.</sub>
+
+**How a run works.** Claude never places orders or touches code. It sets the spoofer's tactics, nine knobs in all: how many fake layers, how big and how far from the best price, the real order's size, which goes first, the timing between steps and the rest between schemes. The Java spoofer runs them, so every market still replays from its seed and every fake is still labelled. Each trial runs three training markets, each paired with its control (same bot, fakes off). Claude sees whether each spoofer was flagged, what the alert said, and the **lift**: the shares its real orders traded with the fakes, divided by the control's. The goal is no flags on any training market with a lift of at least 1.5, in 10 trials. Then its tactics are graded on 10 markets it never saw.
+
+**Round 1, against v1.** Claude met the goal on its third try. On the 10 unseen markets:
+
+| Spoofer | Flagged | Lift | Extra real shares per market, 95% CI | Markets where the fakes helped |
+| --- | ---: | ---: | ---: | ---: |
+| **Claude's tactics** | **0 of 20** | 1.61 | **+287** (+155 to +419) | **10 of 10** |
+| Built-in spoofer | 20 of 20 | 2.05 | +140 (+76 to +204) | 9 of 10 |
+
+It worked out that v1 judges one fake at a time, so it split its fakes into three, each 2 times the real order: 6 times together, but never 3 times in any single order. Its first suggested fix was to judge the fakes together, which is v2. Not everything it concluded was right: it put some flags down to partial fills, which v1 doesn't look at. It found the hole by experiment, not by understanding every detail.
+
+**Is that better than guessing?** The same budget, with tactics drawn at random (5 runs, stopping at the first success):
+
+| Searcher | Trials that met the goal | Runs that met it within 10 trials |
+| --- | ---: | ---: |
+| Claude | 5 of 9 | 1 of 1, on trial 3 |
+| Random | 2 of 42 | 2 of 5, on trials 7 and 5 |
+
+So v1 can be beaten by luck, and the honest claim is narrower: Claude's trials hit about ten times as often, and it says why.
+
+**Patching the detector.** The first version of v2 flagged honest market makers 27 times on five markets. A maker near its position limit shrinks one side of its quote, so the full-size other side looked 3 times bigger. On a full market, every one of the makers' 85 flagged episodes was a bid and ask posted in the same instant, and every one of the spoofer's 142 had its fakes before or after the real order. So v2 ignores the other side of a quote posted at once (v1 already required the real order to come later). That brought the false alarms on those five markets to zero, though that isn't a held-out score, since the fix was found on one of them. The blind spot is a spoofer that posts its real order and fakes in the same instant: this cheater can't (its steps are at least 200 ms apart), but a person could. Requiring the real order to trade was tried first, and it threw away most of the real catches.
+
+```bash
+./mvnw -DskipTests package                                        # the lab runs the packaged app
+uv run tools/agent/cheater.py --via claude-code                   # on a claude.ai login (or --via api with ANTHROPIC_API_KEY)
+uv run tools/agent/cheater.py --searcher random --search-seed 1 --stop-on-success --no-held-out
+uv run tools/agent/cheater.py --via claude-code --detector spoofing-rules-v2   # round 2
+```
+
+A run takes one to two hours on a laptop. The app's desk (`/surveillance`, Red team) shows it live, and `tools/agent/publish.py` adds a finished run to the [public desk](https://nishantshah0.github.io/cross-book/).
 
 ## Architecture
 
@@ -386,6 +428,7 @@ frontend/tests/                    Playwright browser and WebSocket tests
 frontend/cypress/                  Cypress buying-power tests
 docs/architecture.md               design notes and tradeoffs
 docs/performance.md                load test results and bottleneck analysis
+docs/red-team/                     published AI red-team runs, read by the public desk
 tools/loadtest/                    the load generator
 tools/lab/                         runs many seeded markets at once, one per worker
 tools/agent/                       an AI cheater: Claude searches for spoofing tactics the detector misses
@@ -556,7 +599,7 @@ Leave out `type` and `limitPrice` for a market order.
 
 ## What I'd do next
 
-- **An adaptive cheater.** An AI agent that tunes the spoofer to get past the detector, run after run, so the rules are tested against a cheater who changes tactics rather than one they were written for.
+- **Round 2 of the red team**, against v2, and more rounds after it.
 - **More cheaters.** Wash trading between colluding accounts, and pump-and-dump.
 - **More order types.** Stop orders, time-in-force (IOC, FOK, day) and amend-in-place.
 - **Persist quote history.** Chart history lives in memory and resets on restart.
