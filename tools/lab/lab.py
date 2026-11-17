@@ -160,7 +160,7 @@ class Lab:
             env = dict(os.environ, MARKET_MODE="book", CLOCK_MODE="simulated", FEED_MODE="demo",
                        DB_URL="jdbc:postgresql://localhost:%d/worker%d" % (db_port, i),
                        DB_USERNAME=DB_USER, DB_PASSWORD=DB_PASSWORD)
-            log = open(os.path.join(OUT, "worker%d.log" % i), "w")
+            log = open(os.path.join(OUT, "worker-%d-%d.log" % (os.getpid(), i)), "w")
             self.processes.append(subprocess.Popen(
                 [java, "-Xmx512m", "-jar", jars[0], "--server.port=%d" % port,
                  "--spring.docker.compose.enabled=false"] + external_args(self.external),
@@ -168,7 +168,7 @@ class Lab:
             self.urls.append("http://127.0.0.1:%d" % port)
         for url, process in zip(self.urls, self.processes):
             self._wait(lambda: process.poll() is None and self._healthy(url), 120,
-                       "a worker did not start; see target/lab/worker*.log")
+                       "a worker did not start; see target/lab/worker-%d-*.log" % os.getpid())
         print("%d workers up" % self.size, flush=True)
         return self
 
