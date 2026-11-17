@@ -11,6 +11,7 @@ import io.github.nishantshah0.papertrader.bots.SpoofTactics;
 import io.github.nishantshah0.papertrader.grading.Grader;
 import io.github.nishantshah0.papertrader.grading.Score;
 import io.github.nishantshah0.papertrader.surveillance.Surveillance;
+import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -193,6 +194,12 @@ class BotMarketTest extends ApiTestSupport {
         assertThat(report.spoofing().episodes()).isEqualTo(episodes.size());
         assertThat(report.activity()).extracting(BotRunReport.KindActivity::kind)
                 .contains(BotKind.SPOOFER, BotKind.LOOKALIKE, BotKind.NOISE);
+        // every trade is between two bots at one price and one fair value, so what one kind
+        // makes against fair value, others give up: the edges add up to zero, to the cent
+        assertThat(report.activity().stream().map(BotRunReport.KindActivity::edge).reduce(BigDecimal.ZERO, BigDecimal::add)
+                .abs()).isLessThanOrEqualTo(new BigDecimal("0.05"));
+        assertThat(report.activity()).filteredOn(a -> a.kind() == BotKind.SPOOFER).singleElement()
+                .satisfies(a -> assertThat(a.edgeBps()).isNotNull());
     }
 
     // Tactics change how a scheme runs, not what it is. Here the real order goes first,

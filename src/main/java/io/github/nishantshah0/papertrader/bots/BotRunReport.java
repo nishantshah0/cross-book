@@ -41,8 +41,13 @@ public record BotRunReport(
     }
 
     // What each kind did once the clock started: limit and market orders placed, how many
-    // traded at all, and the shares they traded.
-    public record KindActivity(BotKind kind, long orders, long ordersFilled, long sharesFilled) {
+    // traded at all, and the shares they traded. edge is what its trades made against fair
+    // value at the time: for each fill, how far above the feed price it sold or below it
+    // bought, times the shares. Unlike trading P&L, it leaves out what holding the shares
+    // did afterwards, which is where most of an hour's P&L noise comes from. edgeBps is that
+    // per dollar traded, in basis points; null if it never traded.
+    public record KindActivity(BotKind kind, long orders, long ordersFilled, long sharesFilled, BigDecimal edge,
+            Double edgeBps) {
     }
 
     // What the cheaters' labelled orders came to: their episodes, the fakes and how many

@@ -3,6 +3,7 @@ package io.github.nishantshah0.papertrader.bots;
 import io.github.nishantshah0.papertrader.PaperTraderProperties;
 import io.github.nishantshah0.papertrader.account.AccountService;
 import io.github.nishantshah0.papertrader.ledger.LedgerAudit;
+import io.github.nishantshah0.papertrader.quote.Quote;
 import io.github.nishantshah0.papertrader.quote.QuoteCache;
 import io.github.nishantshah0.papertrader.simulation.Simulation;
 import io.github.nishantshah0.papertrader.trading.MarketMode;
@@ -10,6 +11,7 @@ import io.github.nishantshah0.papertrader.trading.MatchingEngine;
 import io.github.nishantshah0.papertrader.trading.OrderService;
 import io.github.nishantshah0.papertrader.trading.PositionRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -219,14 +221,55 @@ public class BotRunner {
     }
 
     private List<BotRunReport.KindActivity> activity(Instant start) {
+        Map<BotKind, double[]> edges = edges(start); // kind -> {edge, notional at the feed}
         return jdbc.query("""
                 select k.kind, count(*) as orders, count(*) filter (where o.filled_quantity > 0) as filled,
                        coalesce(sum(o.filled_quantity), 0) as shares
                 from orders o join answer_key k on k.account_id = o.account_id
                 where o.created_at > ?::timestamptz
                 group by k.kind order by k.kind
-                """, (row, n) -> new BotRunReport.KindActivity(BotKind.valueOf(row.getString("kind")),
-                row.getLong("orders"), row.getLong("filled"), row.getLong("shares")), start.toString());
+                """, (row, n) -> {
+            BotKind kind = BotKind.valueOf(row.getString("kind"));
+            double[] e = edges.getOrDefault(kind, new double[2]);
+            return new BotRunReport.KindActivity(kind, row.getLong("orders"), row.getLong("filled"),
+                    row.getLong("shares"), BigDecimal.valueOf(e[0]).setScale(2, RoundingMode.HALF_EVEN),
+                    e[1] == 0 ? null : Math.round(e[0] / e[1] * 10_000 * 100) / 100.0);
+        }, start.toString());
+    }
+
+    // Each kind's fills since the clock started, priced against the feed at the moment of
+    // the fill: the latest feed price at or before it (the first one, for a fill before it).
+    private Map<BotKind, double[]> edges(Instant start) {
+        Map<String, List<Quote>> feed = quotes.history();
+        Map<BotKind, double[]> edges = new HashMap<>();
+        jdbc.query("""
+                select k.kind, t.symbol, t.side, t.quantity, t.price, t.executed_at
+                from trades t join answer_key k on k.account_id = t.account_id
+                where t.executed_at > ?::timestamptz
+                order by t.id
+                """, row -> {
+            String symbol = row.getString("symbol");
+            List<Quote> history = feed.getOrDefault(symbol, List.of());
+            double fair = history.isEmpty() ? quotes.require(symbol).price().doubleValue()
+                    : feedAt(history, row.getTimestamp("executed_at").toInstant());
+            double quantity = row.getInt("quantity");
+            double sign = "SELL".equals(row.getString("side")) ? 1 : -1;
+            double[] e = edges.computeIfAbsent(BotKind.valueOf(row.getString("kind")), kind -> new double[2]);
+            e[0] += sign * (row.getBigDecimal("price").doubleValue() - fair) * quantity;
+            e[1] += fair * quantity;
+        }, start.toString());
+        return edges;
+    }
+
+    static double feedAt(List<Quote> history, Instant at) {
+        Quote price = history.getFirst();
+        for (Quote quote : history) {
+            if (quote.asOf().isAfter(at)) {
+                break;
+            }
+            price = quote;
+        }
+        return price.price().doubleValue();
     }
 
     private BotRunReport.Spoofing spoofing() {

@@ -300,11 +300,15 @@ def spoof_pairs(args):
     print("| Measure | With fakes | Control | Difference (95% CI) | Seeds where fakes did better |")
     print("| --- | ---: | ---: | ---: | ---: |")
     summary = {}
-    for name, key, fmt in (("Spoofer P&L ($, both spoofers)", "pnl", "%+.0f"),
-                           ("Real orders that traded", "fillRate", "%.0f%%"),
-                           ("Shares the real orders traded", "shares", "%.0f"),
-                           ("Book readers' P&L ($, all 20)", "readers", "%+.0f"),
-                           ("Worst stock vs feed (bps)", "worstGap", "%.0f")):
+    measures = [("Spoofer P&L ($, both spoofers)", "pnl", "%+.0f")]
+    if all("edge" in r["spoofed"] for r in rows) and any(r["spoofed"]["edge"] for r in rows):  # jars before edge had none
+        measures += [("Spoofer edge vs fair value ($)", "edge", "%+.0f"),
+                     ("Spoofer edge vs fair value (bps)", "edgeBps", "%+.1f")]
+    measures += [("Real orders that traded", "fillRate", "%.0f%%"),
+                 ("Shares the real orders traded", "shares", "%.0f"),
+                 ("Book readers' P&L ($, all 20)", "readers", "%+.0f"),
+                 ("Worst stock vs feed (bps)", "worstGap", "%.0f")]
+    for name, key, fmt in measures:
         scale = 100 if key == "fillRate" else 1
         a = [r["spoofed"][key] * scale for r in rows]
         b = [r["control"][key] * scale for r in rows]
@@ -333,7 +337,9 @@ def pair_side(report, labelled):
     else:  # the control places only real orders
         a = activity.get("SPOOFER", {"orders": 0, "ordersFilled": 0, "sharesFilled": 0})
         orders, filled, shares = a["orders"], a["ordersFilled"], a["sharesFilled"]
+    spoofer = activity.get("SPOOFER", {})
     return dict(pnl=pnl.get("SPOOFER", 0.0), readers=pnl.get("BOOK_READER", 0.0),
+                edge=float(spoofer.get("edge") or 0), edgeBps=spoofer.get("edgeBps") or 0.0,
                 fillRate=filled / orders if orders else 0.0, shares=shares,
                 worstGap=max(abs(p["gapBps"] or 0) for p in report["prices"]), seconds=report["seconds"])
 
