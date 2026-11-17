@@ -12,11 +12,15 @@ Run 142 simulated traders, spoofers included, and replay the market to the milli
 ![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
 
-[Quick start](#quick-start) · [Catching the spoofers](#catching-the-spoofers) · [How matching works](#how-matching-works) · [Architecture](#architecture) · [API](#api) · [Design notes](docs/architecture.md)
+[**Live surveillance desk**](https://nishantshah0.github.io/cross-book/) · [Quick start](#quick-start) · [Catching the spoofers](#catching-the-spoofers) · [How matching works](#how-matching-works) · [Architecture](#architecture) · [API](#api) · [Design notes](docs/architecture.md)
 
 <img src="docs/dashboard.png" alt="The trading terminal: watchlist, chart, order book and order ticket" width="900">
 
 <sub>The trading terminal. The order book shows other traders' resting orders around the house's bid and ask; click a price to use it as your limit. Fills, cash and positions update over the WebSocket.</sub>
+
+<img src="docs/media/red-team-replay.gif" alt="Replay of an AI red-team run on the surveillance desk" width="900">
+
+<sub>The <a href="https://nishantshah0.github.io/cross-book/">surveillance desk</a> replaying an AI red-team run: Claude (Opus 5.5) probes the spoofing detector one trial at a time, then its tactics are graded on 10 markets it never saw. <a href="docs/media/red-team-replay.mp4">MP4</a>.</sub>
 
 </div>
 
