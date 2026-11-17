@@ -31,4 +31,23 @@ class ExternalDetectorAppTest extends ApiTestSupport {
         assertThat(get("/api/surveillance/score?detector=outside")).hasStatusOk().bodyJson()
                 .extractingPath("$.detector").isEqualTo("outside");
     }
+
+    // a log from elsewhere goes through every detector, built-in and outside, untouched by this exchange
+    @Test
+    void anyDetectorCanScanALogFromElsewhere() {
+        String spoofing = java.util.stream.IntStream.range(0, 3).mapToObj(e -> {
+            int t = e * 60;
+            String at = "2026-01-05T14:%02d:%02dZ";
+            return ("{\"id\": %d, \"accountId\": 9, \"symbol\": \"X\", \"side\": \"BUY\", \"type\": \"LIMIT\", \"quantity\": 40, "
+                    + "\"limitPrice\": 99.90, \"firstSeq\": %d, \"placedAt\": \"" + at + "\", \"endedAt\": \"" + at + "\", "
+                    + "\"end\": \"CANCELLED\", \"filled\": 0}, "
+                    + "{\"id\": %d, \"accountId\": 9, \"symbol\": \"X\", \"side\": \"SELL\", \"type\": \"LIMIT\", \"quantity\": 10, "
+                    + "\"limitPrice\": 100.01, \"firstSeq\": %d, \"placedAt\": \"" + at + "\", \"endedAt\": \"" + at + "\", "
+                    + "\"end\": \"FILLED\", \"filled\": 10}").formatted(2 * e + 1, 2 * e + 1, 30 + t / 60, 0, 30 + t / 60, 3,
+                    2 * e + 2, 2 * e + 2, 30 + t / 60, 1, 30 + t / 60, 2);
+        }).collect(java.util.stream.Collectors.joining(", "));
+        var result = post("/api/surveillance/scan", "{\"orders\": [" + spoofing + "], \"usernames\": {\"9\": \"agent_9\"}}");
+        assertThat(result).hasStatusOk().bodyJson().extractingPath("$['spoofing-rules'][0].accountId").isEqualTo(9);
+        assertThat(result).bodyJson().extractingPath("$.outside[0].detector").isEqualTo("outside");
+    }
 }
