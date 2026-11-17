@@ -2,7 +2,7 @@
 
 # CrossBook
 
-**A stock exchange engine: price-time matching, books that provably balance, and markets that replay to the millisecond.**<br>
+**A matching engine with an audited ledger: price-time priority, books that provably balance, and markets that replay to the millisecond.**<br>
 Trade in it from a full terminal. Or run 142 simulated traders through it, cheaters included, and use it as a lab for market surveillance. No real money involved.
 
 [![Build and test](https://github.com/nishantshah0/cross-book/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nishantshah0/cross-book/actions/workflows/ci.yml)
