@@ -17,19 +17,23 @@ import org.springframework.stereotype.Component;
 // breaks: it kept every fake under 3x the real order (four fakes of 2x each went
 // unflagged, though together they were 8x), and it held fakes past v1's 10-second
 // window. v1 also only counted a real order placed after the fakes. v2 judges the
-// scheme instead. For each order an account places that traded at least one share (the
-// real one: spoofing is fakes that help a real order execute), it adds up that account's
-// orders on the other side of the same stock that:
+// scheme instead. For each order an account places (the real one), it adds up that
+// account's orders on the other side of the same stock that:
 //
 //   1. are limit orders, later cancelled with under a quarter filled
 //   2. lived 60 seconds or less
 //   3. were resting while the real order was, and were placed within 15 seconds of it,
-//      before or after
+//      before or after, but not in the same instant
 //
-// The first cut skipped the fill check and counted an order placed the instant another
-// ended as resting alongside it. That flagged honest market makers 27 times on 5 seeds:
-// a maker near its position limit shrinks one quote, and its full-size quote on the
-// other side, plus the next re-quote, outweighed a bid that never traded.
+// The same-instant exception is what keeps market makers clear. The first cut flagged
+// them 27 times on 5 seeds: a maker near its position limit shrinks one side of its
+// quote, so the full-size other side, posted with it, looked 3x bigger. On a full market
+// (seed 101) every one of the makers' 85 "episodes" was a bid and ask posted together,
+// and every one of the spoofer's 142 had its fakes before or after the real order.
+// Spoofing needs the fakes to move the book around the real order; a quote's two sides
+// posted at once is market making. The blind spot is a spoofer that posts the real order
+// and its fakes at once; the cheater can't (its steps are at least 200 ms apart), but a
+// person could.
 //
 // If those add up to at least 3x the real order, that's an episode. Three or more
 // episodes in a run raise an alert; the score is the episode count. v1 stays as it was,
@@ -64,9 +68,6 @@ public class SpoofingRulesV2 implements Detector {
                 continue;
             }
             for (LoggedOrder real : book) {
-                if (real.filled() == 0) {
-                    continue;
-                }
                 Instant from = real.placedAt().minus(WINDOW);
                 Instant to = real.placedAt().plus(WINDOW);
                 Instant realEnd = real.endedAt() == null ? Instant.MAX : real.endedAt();
@@ -76,7 +77,8 @@ public class SpoofingRulesV2 implements Detector {
                     if (fake.placedAt().isAfter(to)) {
                         break;
                     }
-                    if (fake.side() == real.side() || fake.id() == real.id() || fake.placedAt().isBefore(from)) {
+                    if (fake.side() == real.side() || fake.id() == real.id() || fake.placedAt().isBefore(from)
+                            || fake.placedAt().equals(real.placedAt())) { // the other side of one quote
                         continue;
                     }
                     // resting at the same time as the real order, for more than an instant
