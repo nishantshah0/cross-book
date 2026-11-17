@@ -24,11 +24,14 @@ import org.openjdk.jmh.infra.Blackhole;
 // fills, balances and event-log rows in one transaction. This measures the part that
 // isn't the database.
 //
-// Each operation is one incoming order or cancel from a seeded stream: 55% limit orders
-// within 50 cents of 100.00 (about a fifth of them cross the spread and trade), 45%
-// cancels of a random resting order. The book is primed to about 2,000 resting orders and
-// the mix keeps it near that size. A trade plans its fills with match(), then applies
-// them with reduce(), as the matching engine does once the fills have committed.
+// Each operation is one incoming order or cancel from a seeded stream. Orders are limit
+// orders within 50 cents of 100.00; cancels pick a random order this stream placed. Over
+// 4 million operations: 54% orders, of which 17% trade (1.8 fills each) and 85% leave
+// shares resting; 46% cancels, of which 80% find the order still resting (the rest had
+// filled). A fixed cancel share either grows the book without limit or empties it, so a
+// cancel is a bit likelier while the book holds 2,000 orders or more (55%) than below
+// (40%), which keeps it at about 2,000. A trade plans its fills with match(), then
+// applies them with reduce(), as the matching engine does once the fills have committed.
 @State(Scope.Thread)
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
@@ -48,20 +51,20 @@ public class OrderBookBenchmark {
 
     private OrderBook book;
     private final List<Long> resting = new ArrayList<>();
-    private int[] kind, price, shares, side, pick;
+    private int[] chance, price, shares, side, pick;
     private int next;
     private long ids;
 
     @Setup(Level.Iteration)
     public void setUp() {
         SplittableRandom random = new SplittableRandom(42);
-        kind = new int[OPS];
+        chance = new int[OPS];
         price = new int[OPS];
         shares = new int[OPS];
         side = new int[OPS];
         pick = new int[OPS];
         for (int i = 0; i < OPS; i++) {
-            kind[i] = random.nextInt(100) < 55 ? 0 : 1;
+            chance[i] = random.nextInt(100);
             side[i] = random.nextInt(2);
             // buyers mostly bid below 100.00 and sellers ask above it; the tails cross
             int offset = (int) Math.round(random.nextDouble() * 50 - 10);
@@ -89,7 +92,8 @@ public class OrderBookBenchmark {
     // one incoming order or cancel; returns the shares it traded
     private int step() {
         int i = next++ & (OPS - 1);
-        if (kind[i] == 1 && !resting.isEmpty()) {
+        boolean cancel = chance[i] < (book.size() >= 2_000 ? 55 : 40);
+        if (cancel && !resting.isEmpty()) {
             int at = pick[i] % resting.size();
             long id = resting.get(at);
             resting.set(at, resting.getLast());
