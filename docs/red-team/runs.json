@@ -17,6 +17,23 @@
   "updatedAt": 1794904538204
  },
  {
+  "name": "20261116-234426-random",
+  "phase": "done",
+  "model": null,
+  "via": null,
+  "searcher": "random",
+  "blind": false,
+  "detector": "spoofing-rules",
+  "trials": 5,
+  "budget": 5,
+  "firstSuccess": 5,
+  "flaggedHeldOut": 0,
+  "spoofersHeldOut": 20,
+  "lift": 1.8490170380078637,
+  "builtInLift": null,
+  "updatedAt": 1794907207243
+ },
+ {
   "name": "20261116-224219-random",
   "phase": "done",
   "model": null,
