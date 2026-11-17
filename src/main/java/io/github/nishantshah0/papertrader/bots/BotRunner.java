@@ -138,12 +138,22 @@ public class BotRunner {
             roster.add(new ValueTrader(i, run.seed(), covers(i, run.valueTraders(), symbols)));
         }
         for (int i = 0; i < run.spoofers(); i++) {
-            roster.add(new Spoofer(i, run.seed(), run.spoofLayers(), run.tactics()));
+            roster.add(cheater(BotKind.SPOOFER, i, run.seed(), run.spoofLayers(), run.tactics()));
         }
         for (int i = 0; i < run.lookalikes(); i++) {
-            roster.add(Spoofer.lookalike(i, run.seed(), run.tactics()));
+            roster.add(cheater(BotKind.LOOKALIKE, i, run.seed(), 0, run.tactics()));
         }
         return roster;
+    }
+
+    // a spoofer (or, with no layers, its honest twin) in the style the tactics name
+    private static Bot cheater(BotKind kind, int ordinal, long seed, int layers, SpoofTactics tactics) {
+        return switch (tactics.style()) {
+            case "coscia" -> new CosciaSpoofer(kind, ordinal, seed, layers);
+            case "sarao" -> new SaraoLayerer(kind, ordinal, seed, layers);
+            default -> kind == BotKind.LOOKALIKE ? Spoofer.lookalike(ordinal, seed, tactics)
+                    : new Spoofer(ordinal, seed, layers, tactics);
+        };
     }
 
     // the stocks the i-th of n bots of a kind follows: consecutive runs of symbols, about

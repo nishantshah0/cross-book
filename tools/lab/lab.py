@@ -92,6 +92,11 @@ def external_args(external):
     return args
 
 
+def style(args):
+    """The spoofer's style, only when one is asked for, so default runs keep their cache keys."""
+    return {"tactics": {"style": args.style}} if args.style else {}
+
+
 def free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -288,7 +293,7 @@ def pct(value):
 
 def evaluate(args):
     with Lab(args.workers, args.external) as lab:
-        reports = lab.run([("/api/surveillance/evaluations", {"seeds": [s], "ticks": args.ticks})
+        reports = lab.run([("/api/surveillance/evaluations", dict({"seeds": [s], "ticks": args.ticks}, **style(args)))
                            for s in args.seeds], "seeds")
     runs = [run for report in reports for run in report["runs"]]
     totals = {}
@@ -323,7 +328,7 @@ def spoof_pairs(args):
     tasks = []
     for seed in args.seeds:
         for layers in (4, 0):
-            tasks.append(("/api/bots/runs", {"seed": seed, "ticks": args.ticks, "spoofLayers": layers}))
+            tasks.append(("/api/bots/runs", dict({"seed": seed, "ticks": args.ticks, "spoofLayers": layers}, **style(args))))
     with Lab(args.workers, args.external) as lab:
         reports = lab.run(tasks, "markets")
     rows = []
@@ -396,6 +401,9 @@ def main():
         command = commands.add_parser(name, help=help_text)
         command.add_argument("--seeds", type=seeds, required=True, help="e.g. 101-105 or 1,4,9")
         command.add_argument("--ticks", type=int, default=240, help="ticks per market (default 240, an hour)")
+        command.add_argument("--style", choices=["layering", "coscia", "sarao"],
+                             help="the spoofers' scheme: the built-in layering (default), or one modelled on "
+                                  "an enforcement case (coscia, sarao)")
     args = parser.parse_args()
     started = time.time()
     {"evaluate": evaluate, "spoof-pairs": spoof_pairs}[args.command](args)

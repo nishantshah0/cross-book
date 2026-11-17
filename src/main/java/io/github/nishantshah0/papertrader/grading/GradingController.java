@@ -2,6 +2,7 @@ package io.github.nishantshah0.papertrader.grading;
 
 import io.github.nishantshah0.papertrader.bots.BotRunRequest;
 import io.github.nishantshah0.papertrader.bots.BotRunner;
+import io.github.nishantshah0.papertrader.bots.SpoofTactics;
 import io.github.nishantshah0.papertrader.jobs.Jobs;
 import io.github.nishantshah0.papertrader.surveillance.Surveillance;
 import jakarta.validation.Valid;
@@ -21,7 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class GradingController {
 
-    record EvaluationRequest(@NotEmpty @Size(max = 50) List<Long> seeds, @Min(1) @Max(5_760) Integer ticks) {
+    record EvaluationRequest(@NotEmpty @Size(max = 50) List<Long> seeds, @Min(1) @Max(5_760) Integer ticks,
+            @Valid SpoofTactics tactics) {
     }
 
     private final Surveillance surveillance;
@@ -51,7 +53,7 @@ class GradingController {
     ResponseEntity<Jobs.Job> evaluate(@Valid @RequestBody EvaluationRequest request) {
         runner.requireRunnable();
         Jobs.Job job = jobs.submit("evaluation",
-                () -> evaluation.evaluate(new Evaluation.Request(request.seeds(), request.ticks())));
+                () -> evaluation.evaluate(new Evaluation.Request(request.seeds(), request.ticks(), request.tactics())));
         return ResponseEntity.accepted().location(URI.create("/api/jobs/" + job.id())).body(job);
     }
 

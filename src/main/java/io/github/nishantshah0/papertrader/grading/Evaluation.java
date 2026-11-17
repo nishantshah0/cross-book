@@ -4,6 +4,7 @@ import io.github.nishantshah0.papertrader.bots.AnswerKey;
 import io.github.nishantshah0.papertrader.bots.BotKind;
 import io.github.nishantshah0.papertrader.bots.BotRunReport;
 import io.github.nishantshah0.papertrader.bots.BotRunRequest;
+import io.github.nishantshah0.papertrader.bots.SpoofTactics;
 import io.github.nishantshah0.papertrader.bots.BotRunner;
 import io.github.nishantshah0.papertrader.surveillance.Alert;
 import io.github.nishantshah0.papertrader.surveillance.Detector;
@@ -22,7 +23,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class Evaluation {
 
-    public record Request(List<Long> seeds, Integer ticks) {
+    public record Request(List<Long> seeds, Integer ticks, SpoofTactics tactics) {
     }
 
     public record Run(long seed, String market, BotRunReport.KindSummary spoofers, List<Score> scores) {
@@ -86,7 +87,7 @@ public class Evaluation {
             for (String market : List.of("spoofers", "control")) {
                 int layers = market.equals("spoofers") ? 4 : 0;
                 BotRunReport report = runner.run(new BotRunRequest(seed, ticks, null, null, null, null, null, layers,
-                        null, null));
+                        null, null, request.tactics()));
                 MarketLog log = surveillance.log();
                 List<Score> scores = new ArrayList<>();
                 for (String name : surveillance.names()) {

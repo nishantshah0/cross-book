@@ -4,11 +4,16 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 
 // How a spoofer runs each scheme. Anything left out keeps the built-in spoofer's way:
 // fakes of 8% of its cash each, a cent apart from a cent behind the best price, then a
 // real order of 2% a cent inside the spread, each step 1 to 3 seconds after the last,
 // and about 40 seconds' rest between schemes. The number of fakes is spoofLayers.
+//
+// style picks the scheme itself: "layering" (the built-in spoofer, which the knobs above
+// tune), or a pattern from an enforcement case, which keeps the case's own sizes and
+// timing and ignores the knobs: "coscia" (CosciaSpoofer) or "sarao" (SaraoLayerer).
 //
 // These are the knobs an adaptive cheater turns. Whatever it picks, the fakes are still
 // fakes: they are labelled SPOOF in the answer key and cancelled when the scheme ends,
@@ -27,9 +32,16 @@ public record SpoofTactics(
         @Min(200) @Max(30_000) Integer stepMinMs,
         @Min(200) @Max(30_000) Integer stepMaxMs,
         // the mean rest between schemes
-        @Min(5_000) @Max(600_000) Integer restMs) {
+        @Min(5_000) @Max(600_000) Integer restMs,
+        @Pattern(regexp = "layering|coscia|sarao") String style) {
 
-    public static final SpoofTactics DEFAULT = new SpoofTactics(0.08, 1, 1, 0.02, false, 1_000, 3_000, 40_000);
+    public static final SpoofTactics DEFAULT = new SpoofTactics(0.08, 1, 1, 0.02, false, 1_000, 3_000, 40_000,
+            "layering");
+
+    public SpoofTactics(Double fakeSize, Integer fakeOffsetCents, Integer fakeGapCents, Double realSize,
+            Boolean realFirst, Integer stepMinMs, Integer stepMaxMs, Integer restMs) {
+        this(fakeSize, fakeOffsetCents, fakeGapCents, realSize, realFirst, stepMinMs, stepMaxMs, restMs, null);
+    }
 
     public SpoofTactics withDefaults() {
         SpoofTactics d = DEFAULT;
@@ -40,6 +52,7 @@ public record SpoofTactics(
                 fakeGapCents == null ? d.fakeGapCents : fakeGapCents,
                 realSize == null ? d.realSize : realSize,
                 realFirst == null ? d.realFirst : realFirst,
-                Math.min(min, max), Math.max(min, max), restMs == null ? d.restMs : restMs);
+                Math.min(min, max), Math.max(min, max), restMs == null ? d.restMs : restMs,
+                style == null ? d.style : style);
     }
 }
