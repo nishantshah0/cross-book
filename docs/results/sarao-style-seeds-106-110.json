@@ -1,0 +1,1924 @@
+{
+ "seeds": [
+  106,
+  107,
+  108,
+  109,
+  110
+ ],
+ "ticks": 240,
+ "totals": [
+  {
+   "detector": "cancel-ratio",
+   "market": "spoofers",
+   "flagged": 53,
+   "cheaters": 10,
+   "caught": 10,
+   "falseAlarms": 43,
+   "byKind": {
+    "MARKET_MAKER": 38,
+    "LOOKALIKE": 5
+   },
+   "spoof": 0,
+   "judged": 0,
+   "hit": 0,
+   "orders": false
+  },
+  {
+   "detector": "claude-written",
+   "market": "spoofers",
+   "flagged": 0,
+   "cheaters": 10,
+   "caught": 0,
+   "falseAlarms": 0,
+   "byKind": {},
+   "spoof": 8841,
+   "judged": 0,
+   "hit": 0,
+   "orders": true
+  },
+  {
+   "detector": "mar-layering",
+   "market": "spoofers",
+   "flagged": 50,
+   "cheaters": 10,
+   "caught": 10,
+   "falseAlarms": 40,
+   "byKind": {
+    "MARKET_MAKER": 40
+   },
+   "spoof": 8841,
+   "judged": 24867,
+   "hit": 4874,
+   "orders": true
+  },
+  {
+   "detector": "spoofing-rules",
+   "market": "spoofers",
+   "flagged": 10,
+   "cheaters": 10,
+   "caught": 10,
+   "falseAlarms": 0,
+   "byKind": {},
+   "spoof": 8841,
+   "judged": 278,
+   "hit": 278,
+   "orders": true
+  },
+  {
+   "detector": "spoofing-rules-v2",
+   "market": "spoofers",
+   "flagged": 10,
+   "cheaters": 10,
+   "caught": 10,
+   "falseAlarms": 0,
+   "byKind": {},
+   "spoof": 8841,
+   "judged": 5100,
+   "hit": 5100,
+   "orders": true
+  },
+  {
+   "detector": "cancel-ratio",
+   "market": "control",
+   "flagged": 48,
+   "cheaters": 0,
+   "caught": 0,
+   "falseAlarms": 48,
+   "byKind": {
+    "MARKET_MAKER": 39,
+    "LOOKALIKE": 6,
+    "SPOOFER": 3
+   },
+   "spoof": 0,
+   "judged": 0,
+   "hit": 0,
+   "orders": false
+  },
+  {
+   "detector": "claude-written",
+   "market": "control",
+   "flagged": 0,
+   "cheaters": 0,
+   "caught": 0,
+   "falseAlarms": 0,
+   "byKind": {},
+   "spoof": 0,
+   "judged": 0,
+   "hit": 0,
+   "orders": true
+  },
+  {
+   "detector": "mar-layering",
+   "market": "control",
+   "flagged": 40,
+   "cheaters": 0,
+   "caught": 0,
+   "falseAlarms": 40,
+   "byKind": {
+    "MARKET_MAKER": 40
+   },
+   "spoof": 0,
+   "judged": 20733,
+   "hit": 0,
+   "orders": true
+  },
+  {
+   "detector": "spoofing-rules",
+   "market": "control",
+   "flagged": 0,
+   "cheaters": 0,
+   "caught": 0,
+   "falseAlarms": 0,
+   "byKind": {},
+   "spoof": 0,
+   "judged": 0,
+   "hit": 0,
+   "orders": true
+  },
+  {
+   "detector": "spoofing-rules-v2",
+   "market": "control",
+   "flagged": 0,
+   "cheaters": 0,
+   "caught": 0,
+   "falseAlarms": 0,
+   "byKind": {},
+   "spoof": 0,
+   "judged": 0,
+   "hit": 0,
+   "orders": true
+  }
+ ],
+ "reports": [
+  {
+   "seeds": [
+    106
+   ],
+   "ticks": 240,
+   "totals": [
+    {
+     "detector": "cancel-ratio",
+     "market": "spoofers",
+     "flagged": 10,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 8,
+     "precision": 0.2,
+     "recall": 1.0,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "claude-written",
+     "market": "spoofers",
+     "flagged": 0,
+     "cheaters": 2,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": 0.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": 0.0
+    },
+    {
+     "detector": "mar-layering",
+     "market": "spoofers",
+     "flagged": 10,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 8,
+     "precision": 0.2,
+     "recall": 1.0,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": 0.258,
+     "orderRecall": 0.632
+    },
+    {
+     "detector": "spoofing-rules",
+     "market": "spoofers",
+     "flagged": 2,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": 1.0,
+     "orderRecall": 0.039
+    },
+    {
+     "detector": "spoofing-rules-v2",
+     "market": "spoofers",
+     "flagged": 2,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": 1.0,
+     "orderRecall": 0.616
+    },
+    {
+     "detector": "cancel-ratio",
+     "market": "control",
+     "flagged": 9,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 9,
+     "precision": 0.0,
+     "recall": null,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8,
+      "LOOKALIKE": 1
+     },
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "claude-written",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "mar-layering",
+     "market": "control",
+     "flagged": 8,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 8,
+     "precision": 0.0,
+     "recall": null,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": 0.0,
+     "orderRecall": null
+    },
+    {
+     "detector": "spoofing-rules",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "spoofing-rules-v2",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    }
+   ],
+   "runs": [
+    {
+     "seed": 106,
+     "market": "spoofers",
+     "spoofers": {
+      "kind": "SPOOFER",
+      "bots": 2,
+      "tradingPnl": 187.79,
+      "pnlPerBot": 93.89
+     },
+     "scores": [
+      {
+       "detector": "cancel-ratio",
+       "flagged": 10,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.2,
+       "recall": 1.0,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": null
+      },
+      {
+       "detector": "claude-written",
+       "flagged": 0,
+       "cheaters": 2,
+       "caught": 0,
+       "missed": 2,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": 0.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 1988,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": 0.0
+       }
+      },
+      {
+       "detector": "mar-layering",
+       "flagged": 10,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.2,
+       "recall": 1.0,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": {
+        "spoofOrders": 1988,
+        "pointedAt": 4865,
+        "pointedAtSpoof": 1257,
+        "precision": 0.258,
+        "recall": 0.632
+       }
+      },
+      {
+       "detector": "spoofing-rules",
+       "flagged": 2,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": 1.0,
+       "recall": 1.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 1988,
+        "pointedAt": 77,
+        "pointedAtSpoof": 77,
+        "precision": 1.0,
+        "recall": 0.039
+       }
+      },
+      {
+       "detector": "spoofing-rules-v2",
+       "flagged": 2,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": 1.0,
+       "recall": 1.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 1988,
+        "pointedAt": 1224,
+        "pointedAtSpoof": 1224,
+        "precision": 1.0,
+        "recall": 0.616
+       }
+      }
+     ]
+    },
+    {
+     "seed": 106,
+     "market": "control",
+     "spoofers": {
+      "kind": "SPOOFER",
+      "bots": 2,
+      "tradingPnl": -293.56,
+      "pnlPerBot": -146.78
+     },
+     "scores": [
+      {
+       "detector": "cancel-ratio",
+       "flagged": 9,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 9,
+       "precision": 0.0,
+       "recall": null,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8,
+        "LOOKALIKE": 1
+       },
+       "orders": null
+      },
+      {
+       "detector": "claude-written",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      },
+      {
+       "detector": "mar-layering",
+       "flagged": 8,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.0,
+       "recall": null,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 3864,
+        "pointedAtSpoof": 0,
+        "precision": 0.0,
+        "recall": null
+       }
+      },
+      {
+       "detector": "spoofing-rules",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      },
+      {
+       "detector": "spoofing-rules-v2",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      }
+     ]
+    }
+   ],
+   "seconds": 972.66
+  },
+  {
+   "seeds": [
+    107
+   ],
+   "ticks": 240,
+   "totals": [
+    {
+     "detector": "cancel-ratio",
+     "market": "spoofers",
+     "flagged": 12,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 10,
+     "precision": 0.167,
+     "recall": 1.0,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8,
+      "LOOKALIKE": 2
+     },
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "claude-written",
+     "market": "spoofers",
+     "flagged": 0,
+     "cheaters": 2,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": 0.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": 0.0
+    },
+    {
+     "detector": "mar-layering",
+     "market": "spoofers",
+     "flagged": 10,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 8,
+     "precision": 0.2,
+     "recall": 1.0,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": 0.224,
+     "orderRecall": 0.555
+    },
+    {
+     "detector": "spoofing-rules",
+     "market": "spoofers",
+     "flagged": 2,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": 1.0,
+     "orderRecall": 0.014
+    },
+    {
+     "detector": "spoofing-rules-v2",
+     "market": "spoofers",
+     "flagged": 2,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": 1.0,
+     "orderRecall": 0.517
+    },
+    {
+     "detector": "cancel-ratio",
+     "market": "control",
+     "flagged": 10,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 10,
+     "precision": 0.0,
+     "recall": null,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8,
+      "LOOKALIKE": 2
+     },
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "claude-written",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "mar-layering",
+     "market": "control",
+     "flagged": 8,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 8,
+     "precision": 0.0,
+     "recall": null,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": 0.0,
+     "orderRecall": null
+    },
+    {
+     "detector": "spoofing-rules",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "spoofing-rules-v2",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    }
+   ],
+   "runs": [
+    {
+     "seed": 107,
+     "market": "spoofers",
+     "spoofers": {
+      "kind": "SPOOFER",
+      "bots": 2,
+      "tradingPnl": -559.74,
+      "pnlPerBot": -279.87
+     },
+     "scores": [
+      {
+       "detector": "cancel-ratio",
+       "flagged": 12,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 10,
+       "precision": 0.167,
+       "recall": 1.0,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8,
+        "LOOKALIKE": 2
+       },
+       "orders": null
+      },
+      {
+       "detector": "claude-written",
+       "flagged": 0,
+       "cheaters": 2,
+       "caught": 0,
+       "missed": 2,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": 0.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 2029,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": 0.0
+       }
+      },
+      {
+       "detector": "mar-layering",
+       "flagged": 10,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.2,
+       "recall": 1.0,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": {
+        "spoofOrders": 2029,
+        "pointedAt": 5025,
+        "pointedAtSpoof": 1126,
+        "precision": 0.224,
+        "recall": 0.555
+       }
+      },
+      {
+       "detector": "spoofing-rules",
+       "flagged": 2,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": 1.0,
+       "recall": 1.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 2029,
+        "pointedAt": 29,
+        "pointedAtSpoof": 29,
+        "precision": 1.0,
+        "recall": 0.014
+       }
+      },
+      {
+       "detector": "spoofing-rules-v2",
+       "flagged": 2,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": 1.0,
+       "recall": 1.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 2029,
+        "pointedAt": 1048,
+        "pointedAtSpoof": 1048,
+        "precision": 1.0,
+        "recall": 0.517
+       }
+      }
+     ]
+    },
+    {
+     "seed": 107,
+     "market": "control",
+     "spoofers": {
+      "kind": "SPOOFER",
+      "bots": 2,
+      "tradingPnl": 71.47,
+      "pnlPerBot": 35.74
+     },
+     "scores": [
+      {
+       "detector": "cancel-ratio",
+       "flagged": 10,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 10,
+       "precision": 0.0,
+       "recall": null,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8,
+        "LOOKALIKE": 2
+       },
+       "orders": null
+      },
+      {
+       "detector": "claude-written",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      },
+      {
+       "detector": "mar-layering",
+       "flagged": 8,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.0,
+       "recall": null,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 4109,
+        "pointedAtSpoof": 0,
+        "precision": 0.0,
+        "recall": null
+       }
+      },
+      {
+       "detector": "spoofing-rules",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      },
+      {
+       "detector": "spoofing-rules-v2",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      }
+     ]
+    }
+   ],
+   "seconds": 960.9
+  },
+  {
+   "seeds": [
+    108
+   ],
+   "ticks": 240,
+   "totals": [
+    {
+     "detector": "cancel-ratio",
+     "market": "spoofers",
+     "flagged": 11,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 9,
+     "precision": 0.182,
+     "recall": 1.0,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8,
+      "LOOKALIKE": 1
+     },
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "claude-written",
+     "market": "spoofers",
+     "flagged": 0,
+     "cheaters": 2,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": 0.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": 0.0
+    },
+    {
+     "detector": "mar-layering",
+     "market": "spoofers",
+     "flagged": 10,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 8,
+     "precision": 0.2,
+     "recall": 1.0,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": 0.194,
+     "orderRecall": 0.486
+    },
+    {
+     "detector": "spoofing-rules",
+     "market": "spoofers",
+     "flagged": 2,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": 1.0,
+     "orderRecall": 0.032
+    },
+    {
+     "detector": "spoofing-rules-v2",
+     "market": "spoofers",
+     "flagged": 2,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": 1.0,
+     "orderRecall": 0.56
+    },
+    {
+     "detector": "cancel-ratio",
+     "market": "control",
+     "flagged": 10,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 10,
+     "precision": 0.0,
+     "recall": null,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8,
+      "SPOOFER": 1,
+      "LOOKALIKE": 1
+     },
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "claude-written",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "mar-layering",
+     "market": "control",
+     "flagged": 8,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 8,
+     "precision": 0.0,
+     "recall": null,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": 0.0,
+     "orderRecall": null
+    },
+    {
+     "detector": "spoofing-rules",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "spoofing-rules-v2",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    }
+   ],
+   "runs": [
+    {
+     "seed": 108,
+     "market": "spoofers",
+     "spoofers": {
+      "kind": "SPOOFER",
+      "bots": 2,
+      "tradingPnl": -96.69,
+      "pnlPerBot": -48.35
+     },
+     "scores": [
+      {
+       "detector": "cancel-ratio",
+       "flagged": 11,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 9,
+       "precision": 0.182,
+       "recall": 1.0,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8,
+        "LOOKALIKE": 1
+       },
+       "orders": null
+      },
+      {
+       "detector": "claude-written",
+       "flagged": 0,
+       "cheaters": 2,
+       "caught": 0,
+       "missed": 2,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": 0.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 2084,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": 0.0
+       }
+      },
+      {
+       "detector": "mar-layering",
+       "flagged": 10,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.2,
+       "recall": 1.0,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": {
+        "spoofOrders": 2084,
+        "pointedAt": 5208,
+        "pointedAtSpoof": 1012,
+        "precision": 0.194,
+        "recall": 0.486
+       }
+      },
+      {
+       "detector": "spoofing-rules",
+       "flagged": 2,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": 1.0,
+       "recall": 1.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 2084,
+        "pointedAt": 67,
+        "pointedAtSpoof": 67,
+        "precision": 1.0,
+        "recall": 0.032
+       }
+      },
+      {
+       "detector": "spoofing-rules-v2",
+       "flagged": 2,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": 1.0,
+       "recall": 1.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 2084,
+        "pointedAt": 1167,
+        "pointedAtSpoof": 1167,
+        "precision": 1.0,
+        "recall": 0.56
+       }
+      }
+     ]
+    },
+    {
+     "seed": 108,
+     "market": "control",
+     "spoofers": {
+      "kind": "SPOOFER",
+      "bots": 2,
+      "tradingPnl": 136.08,
+      "pnlPerBot": 68.04
+     },
+     "scores": [
+      {
+       "detector": "cancel-ratio",
+       "flagged": 10,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 10,
+       "precision": 0.0,
+       "recall": null,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8,
+        "SPOOFER": 1,
+        "LOOKALIKE": 1
+       },
+       "orders": null
+      },
+      {
+       "detector": "claude-written",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      },
+      {
+       "detector": "mar-layering",
+       "flagged": 8,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.0,
+       "recall": null,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 4237,
+        "pointedAtSpoof": 0,
+        "precision": 0.0,
+        "recall": null
+       }
+      },
+      {
+       "detector": "spoofing-rules",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      },
+      {
+       "detector": "spoofing-rules-v2",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      }
+     ]
+    }
+   ],
+   "seconds": 951.98
+  },
+  {
+   "seeds": [
+    109
+   ],
+   "ticks": 240,
+   "totals": [
+    {
+     "detector": "cancel-ratio",
+     "market": "spoofers",
+     "flagged": 9,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 7,
+     "precision": 0.222,
+     "recall": 1.0,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 6,
+      "LOOKALIKE": 1
+     },
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "claude-written",
+     "market": "spoofers",
+     "flagged": 0,
+     "cheaters": 2,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": 0.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": 0.0
+    },
+    {
+     "detector": "mar-layering",
+     "market": "spoofers",
+     "flagged": 10,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 8,
+     "precision": 0.2,
+     "recall": 1.0,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": 0.118,
+     "orderRecall": 0.483
+    },
+    {
+     "detector": "spoofing-rules",
+     "market": "spoofers",
+     "flagged": 2,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": 1.0,
+     "orderRecall": 0.024
+    },
+    {
+     "detector": "spoofing-rules-v2",
+     "market": "spoofers",
+     "flagged": 2,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": 1.0,
+     "orderRecall": 0.591
+    },
+    {
+     "detector": "cancel-ratio",
+     "market": "control",
+     "flagged": 9,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 9,
+     "precision": 0.0,
+     "recall": null,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 7,
+      "SPOOFER": 1,
+      "LOOKALIKE": 1
+     },
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "claude-written",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "mar-layering",
+     "market": "control",
+     "flagged": 8,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 8,
+     "precision": 0.0,
+     "recall": null,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": 0.0,
+     "orderRecall": null
+    },
+    {
+     "detector": "spoofing-rules",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "spoofing-rules-v2",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    }
+   ],
+   "runs": [
+    {
+     "seed": 109,
+     "market": "spoofers",
+     "spoofers": {
+      "kind": "SPOOFER",
+      "bots": 2,
+      "tradingPnl": -148.48,
+      "pnlPerBot": -74.24
+     },
+     "scores": [
+      {
+       "detector": "cancel-ratio",
+       "flagged": 9,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 7,
+       "precision": 0.222,
+       "recall": 1.0,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 6,
+        "LOOKALIKE": 1
+       },
+       "orders": null
+      },
+      {
+       "detector": "claude-written",
+       "flagged": 0,
+       "cheaters": 2,
+       "caught": 0,
+       "missed": 2,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": 0.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 1175,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": 0.0
+       }
+      },
+      {
+       "detector": "mar-layering",
+       "flagged": 10,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.2,
+       "recall": 1.0,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": {
+        "spoofOrders": 1175,
+        "pointedAt": 4793,
+        "pointedAtSpoof": 567,
+        "precision": 0.118,
+        "recall": 0.483
+       }
+      },
+      {
+       "detector": "spoofing-rules",
+       "flagged": 2,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": 1.0,
+       "recall": 1.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 1175,
+        "pointedAt": 28,
+        "pointedAtSpoof": 28,
+        "precision": 1.0,
+        "recall": 0.024
+       }
+      },
+      {
+       "detector": "spoofing-rules-v2",
+       "flagged": 2,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": 1.0,
+       "recall": 1.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 1175,
+        "pointedAt": 695,
+        "pointedAtSpoof": 695,
+        "precision": 1.0,
+        "recall": 0.591
+       }
+      }
+     ]
+    },
+    {
+     "seed": 109,
+     "market": "control",
+     "spoofers": {
+      "kind": "SPOOFER",
+      "bots": 2,
+      "tradingPnl": -420.98,
+      "pnlPerBot": -210.49
+     },
+     "scores": [
+      {
+       "detector": "cancel-ratio",
+       "flagged": 9,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 9,
+       "precision": 0.0,
+       "recall": null,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 7,
+        "SPOOFER": 1,
+        "LOOKALIKE": 1
+       },
+       "orders": null
+      },
+      {
+       "detector": "claude-written",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      },
+      {
+       "detector": "mar-layering",
+       "flagged": 8,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.0,
+       "recall": null,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 4314,
+        "pointedAtSpoof": 0,
+        "precision": 0.0,
+        "recall": null
+       }
+      },
+      {
+       "detector": "spoofing-rules",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      },
+      {
+       "detector": "spoofing-rules-v2",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      }
+     ]
+    }
+   ],
+   "seconds": 822.83
+  },
+  {
+   "seeds": [
+    110
+   ],
+   "ticks": 240,
+   "totals": [
+    {
+     "detector": "cancel-ratio",
+     "market": "spoofers",
+     "flagged": 11,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 9,
+     "precision": 0.182,
+     "recall": 1.0,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8,
+      "LOOKALIKE": 1
+     },
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "claude-written",
+     "market": "spoofers",
+     "flagged": 0,
+     "cheaters": 2,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": 0.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": 0.0
+    },
+    {
+     "detector": "mar-layering",
+     "market": "spoofers",
+     "flagged": 10,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 8,
+     "precision": 0.2,
+     "recall": 1.0,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": 0.183,
+     "orderRecall": 0.583
+    },
+    {
+     "detector": "spoofing-rules",
+     "market": "spoofers",
+     "flagged": 2,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": 1.0,
+     "orderRecall": 0.049
+    },
+    {
+     "detector": "spoofing-rules-v2",
+     "market": "spoofers",
+     "flagged": 2,
+     "cheaters": 2,
+     "caught": 2,
+     "falseAlarms": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "falseAlarmsByKind": {},
+     "orderPrecision": 1.0,
+     "orderRecall": 0.617
+    },
+    {
+     "detector": "cancel-ratio",
+     "market": "control",
+     "flagged": 10,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 10,
+     "precision": 0.0,
+     "recall": null,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8,
+      "SPOOFER": 1,
+      "LOOKALIKE": 1
+     },
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "claude-written",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "mar-layering",
+     "market": "control",
+     "flagged": 8,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 8,
+     "precision": 0.0,
+     "recall": null,
+     "falseAlarmsByKind": {
+      "MARKET_MAKER": 8
+     },
+     "orderPrecision": 0.0,
+     "orderRecall": null
+    },
+    {
+     "detector": "spoofing-rules",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    },
+    {
+     "detector": "spoofing-rules-v2",
+     "market": "control",
+     "flagged": 0,
+     "cheaters": 0,
+     "caught": 0,
+     "falseAlarms": 0,
+     "precision": null,
+     "recall": null,
+     "falseAlarmsByKind": {},
+     "orderPrecision": null,
+     "orderRecall": null
+    }
+   ],
+   "runs": [
+    {
+     "seed": 110,
+     "market": "spoofers",
+     "spoofers": {
+      "kind": "SPOOFER",
+      "bots": 2,
+      "tradingPnl": -834.61,
+      "pnlPerBot": -417.31
+     },
+     "scores": [
+      {
+       "detector": "cancel-ratio",
+       "flagged": 11,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 9,
+       "precision": 0.182,
+       "recall": 1.0,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8,
+        "LOOKALIKE": 1
+       },
+       "orders": null
+      },
+      {
+       "detector": "claude-written",
+       "flagged": 0,
+       "cheaters": 2,
+       "caught": 0,
+       "missed": 2,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": 0.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 1565,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": 0.0
+       }
+      },
+      {
+       "detector": "mar-layering",
+       "flagged": 10,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.2,
+       "recall": 1.0,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": {
+        "spoofOrders": 1565,
+        "pointedAt": 4976,
+        "pointedAtSpoof": 912,
+        "precision": 0.183,
+        "recall": 0.583
+       }
+      },
+      {
+       "detector": "spoofing-rules",
+       "flagged": 2,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": 1.0,
+       "recall": 1.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 1565,
+        "pointedAt": 77,
+        "pointedAtSpoof": 77,
+        "precision": 1.0,
+        "recall": 0.049
+       }
+      },
+      {
+       "detector": "spoofing-rules-v2",
+       "flagged": 2,
+       "cheaters": 2,
+       "caught": 2,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": 1.0,
+       "recall": 1.0,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 1565,
+        "pointedAt": 966,
+        "pointedAtSpoof": 966,
+        "precision": 1.0,
+        "recall": 0.617
+       }
+      }
+     ]
+    },
+    {
+     "seed": 110,
+     "market": "control",
+     "spoofers": {
+      "kind": "SPOOFER",
+      "bots": 2,
+      "tradingPnl": 865.78,
+      "pnlPerBot": 432.89
+     },
+     "scores": [
+      {
+       "detector": "cancel-ratio",
+       "flagged": 10,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 10,
+       "precision": 0.0,
+       "recall": null,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8,
+        "SPOOFER": 1,
+        "LOOKALIKE": 1
+       },
+       "orders": null
+      },
+      {
+       "detector": "claude-written",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      },
+      {
+       "detector": "mar-layering",
+       "flagged": 8,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 8,
+       "precision": 0.0,
+       "recall": null,
+       "falseAlarmsByKind": {
+        "MARKET_MAKER": 8
+       },
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 4209,
+        "pointedAtSpoof": 0,
+        "precision": 0.0,
+        "recall": null
+       }
+      },
+      {
+       "detector": "spoofing-rules",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      },
+      {
+       "detector": "spoofing-rules-v2",
+       "flagged": 0,
+       "cheaters": 0,
+       "caught": 0,
+       "missed": 0,
+       "falseAlarms": 0,
+       "precision": null,
+       "recall": null,
+       "falseAlarmsByKind": {},
+       "orders": {
+        "spoofOrders": 0,
+        "pointedAt": 0,
+        "pointedAtSpoof": 0,
+        "precision": null,
+        "recall": null
+       }
+      }
+     ]
+    }
+   ],
+   "seconds": 819.68
+  }
+ ]
+}

@@ -1,5 +1,22 @@
 [
  {
+  "name": "20261117-033538-v2",
+  "phase": "done",
+  "model": "claude-opus-5-5",
+  "via": "claude-code",
+  "searcher": "claude",
+  "blind": false,
+  "detector": "spoofing-rules-v2",
+  "trials": 4,
+  "budget": 4,
+  "firstSuccess": null,
+  "flaggedHeldOut": 0,
+  "spoofersHeldOut": 20,
+  "lift": 1.0394671928959054,
+  "builtInLift": 2.0471204188481678,
+  "updatedAt": 1794911417158
+ },
+ {
   "name": "20261117-001101-blind",
   "phase": "done",
   "model": "claude-opus-5-5",
