@@ -430,6 +430,27 @@ class Live:
         os.replace(path + ".tmp", path)
 
 
+def grade_later(run, workers):
+    """Held-out grading for a run that skipped it. The built-in spoofer's held-out markets
+    are the same in every run, so only the submitted tactics are run here."""
+    path = os.path.join(run, "result.json")
+    with open(path) as f:
+        result = json.load(f)
+    global DETECTOR
+    DETECTOR = result["detector"]
+    final, held_out = result["final"], result["heldOutSeeds"]
+    with lab.Lab(workers) as market:
+        summary = summarize(held_out, market.run(markets(held_out, final["layers"], final["tactics"], result["ticks"]),
+                                                 "held-out cheater"))
+    result["heldOut"] = {"cheater": dict(summary, paired=paired(summary["rows"]))}
+    with open(path, "w") as f:
+        json.dump(result, f, indent=1)
+    p = summary and paired(summary["rows"])
+    print("held out: %d of %d spoofers flagged, lift %s, extra shares %+.0f (%s to %s), helped on %d of %d" % (
+        summary["flaggedSpoofers"], 2 * len(held_out), summary["lift"], p["shares"][0], p["shares"][1],
+        p["shares"][2], p["better"], p["seeds"]))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--trials", type=int, default=10, help="trials Claude may run (default 10)")
@@ -449,9 +470,14 @@ def main():
     parser.add_argument("--via", choices=["api", "claude-code"], default="api",
                         help="api (ANTHROPIC_API_KEY, the default) or claude-code (claude -p on a claude.ai login)")
     parser.add_argument("--held-out", type=int, default=len(HELD_OUT_SEEDS), help="held-out seeds (default 10)")
+    parser.add_argument("--grade", metavar="RUN",
+                        help="grade a finished run's final tactics on the held-out markets and add them to its "
+                             "result (for baselines run with --no-held-out that met the goal)")
     args = parser.parse_args()
     global DETECTOR
     DETECTOR = args.detector
+    if args.grade:
+        return grade_later(args.grade, args.workers)
     searcher = "scripted" if args.dry_run else args.searcher
     suffix = "".join("-" + part for part, on in (("dry", args.dry_run), ("random", searcher == "random"),
                                                  ("blind", args.blind), ("v2", args.detector.endswith("-v2"))) if on)
