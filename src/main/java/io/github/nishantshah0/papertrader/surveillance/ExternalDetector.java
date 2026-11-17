@@ -7,6 +7,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
@@ -16,6 +18,8 @@ import tools.jackson.databind.ObjectMapper;
 // orders (order ids) and evidence (event-log sequence numbers) are optional. The program
 // sees exactly what the built-in detectors see, nothing from the answer key.
 final class ExternalDetector implements Detector {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ExternalDetector.class);
 
     // what the program prints for each account it flags
     record Output(Long accountId, Double score, String summary, List<Long> orders, List<Long> evidence) {
@@ -51,6 +55,11 @@ final class ExternalDetector implements Detector {
             }
             if (process.exitValue() != 0) {
                 throw new IllegalStateException(name() + " exited with " + process.exitValue() + ": " + tail(err));
+            }
+            String warnings = tail(err);
+            if (!warnings.isEmpty()) {
+                // a program that swallows its own errors and prints [] would otherwise look like a clean market
+                LOG.warn("{} wrote to stderr: {}", name(), warnings);
             }
             List<Output> outputs = json.readValue(new String(out, StandardCharsets.UTF_8), new TypeReference<>() {
             });

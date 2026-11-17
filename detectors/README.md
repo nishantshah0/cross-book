@@ -66,3 +66,4 @@ reruns its markets.
 | --- | --- |
 | [example.py](example.py) | The contract in 30 lines: flags accounts that cancel nearly every order. A starting point, not a serious detector. |
 | [mar_layering.py](mar_layering.py) | Layering and spoofing as the EU Market Abuse Regulation's indicators describe it (Delegated Regulation 2016/522, Annex II, 5(e)): multiple or large orders on one side, pulled once a trade on the other side has happened. Specified from the text, with thresholds fixed before its first run. |
+| [claude_written.py](claude_written.py) | Written by Claude (Opus 5.5) blind: it got only this contract and the task, with no access to this repository, the bots or the other detectors (tools/agent/write_detector.py). Saved as written, with its prompt and its own description at the top. Note: on an unexpected error it prints `[]` instead of failing; the app logs anything a detector writes to stderr so that can't pass silently. |
