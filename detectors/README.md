@@ -65,3 +65,4 @@ reruns its markets.
 | Detector | What it is |
 | --- | --- |
 | [example.py](example.py) | The contract in 30 lines: flags accounts that cancel nearly every order. A starting point, not a serious detector. |
+| [mar_layering.py](mar_layering.py) | Layering and spoofing as the EU Market Abuse Regulation's indicators describe it (Delegated Regulation 2016/522, Annex II, 5(e)): multiple or large orders on one side, pulled once a trade on the other side has happened. Specified from the text, with thresholds fixed before its first run. |
