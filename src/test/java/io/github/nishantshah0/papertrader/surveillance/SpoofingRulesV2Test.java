@@ -42,7 +42,7 @@ class SpoofingRulesV2Test {
         for (int e = 0; e < 3; e++) {
             long at = e * 60_000L;
             order(2, OrderSide.BUY, 40, at, at + 25_000, "CANCELLED", 0); // 25 s
-            order(2, OrderSide.SELL, 10, at + 1_000, at + 20_000, "CANCELLED", 0);
+            order(2, OrderSide.SELL, 10, at + 1_000, at + 20_000, "CANCELLED", 4); // part filled
             order(3, OrderSide.SELL, 10, at, at + 6_000, "FILLED", 10); // real first
             order(3, OrderSide.BUY, 40, at + 2_000, at + 5_000, "CANCELLED", 0);
         }
@@ -69,6 +69,16 @@ class SpoofingRulesV2Test {
             // over 15 seconds apart, so not one scheme
             order(7, OrderSide.SELL, 10, at, at + 40_000, "FILLED", 10);
             order(7, OrderSide.BUY, 40, at + 16_000, at + 20_000, "CANCELLED", 0);
+        }
+        for (int e = 0; e < 3; e++) {
+            long at = e * 60_000L;
+            // a market maker near its limit: a small bid that never trades, a full-size ask
+            order(9, OrderSide.BUY, 10, at, at + 3_000, "CANCELLED", 0);
+            order(9, OrderSide.SELL, 40, at, at + 3_000, "CANCELLED", 0);
+            // a bid that traded, then re-quoted: the next ask starts the instant the bid ends
+            order(10, OrderSide.BUY, 10, at, at + 3_000, "CANCELLED", 3);
+            order(10, OrderSide.SELL, 20, at, at + 3_000, "CANCELLED", 0);
+            order(10, OrderSide.SELL, 20, at + 3_000, at + 6_000, "CANCELLED", 0);
         }
         for (int e = 0; e < 2; e++) { // only two episodes
             long at = e * 60_000L;
