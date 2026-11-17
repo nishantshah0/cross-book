@@ -1,0 +1,1223 @@
+{
+ "seeds": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10
+ ],
+ "minutes": 60,
+ "rows": [
+  {
+   "seed": 1,
+   "market": "spoofers",
+   "orders": 5165,
+   "realShares": 1357,
+   "realOrders": 163,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 652,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 652,
+     "fakesFound": 637,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 652,
+     "fakesFound": 637,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 652,
+     "fakesFound": 114,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 652,
+     "fakesFound": 106,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 1,
+   "market": "control",
+   "orders": 4666,
+   "realShares": 1302,
+   "realOrders": 163,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 3,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1,
+      "LayeringSpoofer": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 2,
+   "market": "spoofers",
+   "orders": 6167,
+   "realShares": 1552,
+   "realOrders": 158,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 632,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 632,
+     "fakesFound": 619,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 632,
+     "fakesFound": 619,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 632,
+     "fakesFound": 143,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 632,
+     "fakesFound": 139,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 2,
+   "market": "control",
+   "orders": 5485,
+   "realShares": 1553,
+   "realOrders": 158,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 4,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2,
+      "LayeringSpoofer": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 3,
+   "market": "spoofers",
+   "orders": 6493,
+   "realShares": 1843,
+   "realOrders": 178,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 712,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 712,
+     "fakesFound": 698,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 712,
+     "fakesFound": 698,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 712,
+     "fakesFound": 173,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 712,
+     "fakesFound": 173,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 3,
+   "market": "control",
+   "orders": 5773,
+   "realShares": 1887,
+   "realOrders": 178,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 3,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2,
+      "LayeringSpoofer": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 4,
+   "market": "spoofers",
+   "orders": 6036,
+   "realShares": 1761,
+   "realOrders": 170,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 680,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 680,
+     "fakesFound": 667,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 680,
+     "fakesFound": 667,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 680,
+     "fakesFound": 154,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 680,
+     "fakesFound": 150,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 4,
+   "market": "control",
+   "orders": 5272,
+   "realShares": 1203,
+   "realOrders": 170,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 4,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2,
+      "LayeringSpoofer": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 5,
+   "market": "spoofers",
+   "orders": 6175,
+   "realShares": 1303,
+   "realOrders": 150,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 600,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 600,
+     "fakesFound": 583,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 600,
+     "fakesFound": 583,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 600,
+     "fakesFound": 115,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 600,
+     "fakesFound": 111,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 5,
+   "market": "control",
+   "orders": 5500,
+   "realShares": 1341,
+   "realOrders": 150,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 4,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2,
+      "LayeringSpoofer": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 6,
+   "market": "spoofers",
+   "orders": 5256,
+   "realShares": 1337,
+   "realOrders": 144,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 576,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 576,
+     "fakesFound": 569,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 576,
+     "fakesFound": 569,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 576,
+     "fakesFound": 115,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 576,
+     "fakesFound": 115,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 6,
+   "market": "control",
+   "orders": 4739,
+   "realShares": 1369,
+   "realOrders": 144,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 3,
+     "falseByKind": {
+      "LayeringSpoofer": 2,
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 7,
+   "market": "spoofers",
+   "orders": 5408,
+   "realShares": 1675,
+   "realOrders": 175,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 700,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 700,
+     "fakesFound": 686,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 700,
+     "fakesFound": 686,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 700,
+     "fakesFound": 152,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 700,
+     "fakesFound": 150,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 7,
+   "market": "control",
+   "orders": 5117,
+   "realShares": 1783,
+   "realOrders": 175,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 3,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1,
+      "LayeringSpoofer": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 8,
+   "market": "spoofers",
+   "orders": 5205,
+   "realShares": 1528,
+   "realOrders": 149,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 596,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 596,
+     "fakesFound": 584,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 596,
+     "fakesFound": 584,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 596,
+     "fakesFound": 134,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 596,
+     "fakesFound": 130,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 8,
+   "market": "control",
+   "orders": 4564,
+   "realShares": 1290,
+   "realOrders": 149,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 3,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1,
+      "LayeringSpoofer": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 9,
+   "market": "spoofers",
+   "orders": 5016,
+   "realShares": 1431,
+   "realOrders": 162,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 652,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 652,
+     "fakesFound": 638,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 652,
+     "fakesFound": 638,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 652,
+     "fakesFound": 135,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 652,
+     "fakesFound": 131,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 9,
+   "market": "control",
+   "orders": 4263,
+   "realShares": 1394,
+   "realOrders": 162,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 3,
+     "falseByKind": {
+      "LayeringSpoofer": 2,
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 1,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 1
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 10,
+   "market": "spoofers",
+   "orders": 6373,
+   "realShares": 1660,
+   "realOrders": 170,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 680,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 680,
+     "fakesFound": 670,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 680,
+     "fakesFound": 670,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 680,
+     "fakesFound": 154,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 2,
+     "cheaters": 2,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 680,
+     "fakesFound": 153,
+     "ordersJudged": true
+    }
+   }
+  },
+  {
+   "seed": 10,
+   "market": "control",
+   "orders": 5569,
+   "realShares": 1618,
+   "realOrders": 170,
+   "scores": {
+    "cancel-ratio": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 4,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2,
+      "LayeringSpoofer": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": false
+    },
+    "spoofing-rules": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "spoofing-rules-v2": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "mar-layering": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 2,
+     "falseByKind": {
+      "AdaptiveMarketMakerAgent": 2
+     },
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    },
+    "claude-written": {
+     "caught": 0,
+     "cheaters": 0,
+     "falseAlarms": 0,
+     "falseByKind": {},
+     "fakes": 0,
+     "fakesFound": 0,
+     "ordersJudged": true
+    }
+   }
+  }
+ ]
+}
