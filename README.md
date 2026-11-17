@@ -216,7 +216,7 @@ v1's thresholds were set on seeds 1 to 3 and then frozen. Scored on five seeds i
 | Spoofing rules v2* | 10 / 10 | 0 | 100% | 97% (2,543 of 2,617) |
 | Cancel-ratio baseline | 10 / 10 | 107 | 9% | – |
 
-\* Not a held-out result: v2's fix for market makers was found on seed 101, one of these five.
+\* Not a held-out result: v2's fix for market makers was found on seed 101, one of these five. So v2 was also scored on five fresh seeds (106 to 110) after the fix: 10 of 10 spoofers caught, no false alarms on either market, and 96% of the fakes found (v1: 86%, the baseline: 108 false alarms).
 
 The baseline's 107 false alarms are 77 honest market makers, which re-quote all day, and all 30 lookalikes and control spoofers, which run the spoofer's code with the fakes turned off. v1 flagged none of the 1,410 honest accounts across the ten markets, the lookalikes and control spoofers included. On seed 101 it missed 47 fakes. 27 were less than 3 times the real order, usually a spoofer's last fake ask, cut short when it ran low on shares. 12 got a quarter or more filled before the cancel, and 8 came from schemes where no real order was placed. An account is still caught by its other episodes, so these only cost order-level recall.
 
@@ -258,7 +258,7 @@ It worked out that v1 judges one fake at a time, so it split its fakes into thre
 
 So v1 can be beaten by luck, and the honest claim is narrower: Claude's trials hit about ten times as often, and it says why.
 
-**Patching the detector.** The first version of v2 flagged honest market makers 27 times on five markets. A maker near its position limit shrinks one side of its quote, so the full-size other side looked 3 times bigger. On a full market, every one of the makers' 85 flagged episodes was a bid and ask posted in the same instant, and every one of the spoofer's 142 had its fakes before or after the real order. So v2 ignores the other side of a quote posted at once (v1 already required the real order to come later). That brought the false alarms on those five markets to zero, though that isn't a held-out score, since the fix was found on one of them. The blind spot is a spoofer that posts its real order and fakes in the same instant: this cheater can't (its steps are at least 200 ms apart), but a person could. Requiring the real order to trade was tried first, and it threw away most of the real catches.
+**Patching the detector.** The first version of v2 flagged honest market makers 27 times on five markets. A maker near its position limit shrinks one side of its quote, so the full-size other side looked 3 times bigger. On a full market, every one of the makers' 85 flagged episodes was a bid and ask posted in the same instant, and every one of the spoofer's 142 had its fakes before or after the real order. So v2 ignores the other side of a quote posted at once (v1 already required the real order to come later). That brought the false alarms to zero, on the five markets where the fix was found and on five fresh ones. The blind spot is a spoofer that posts its real order and fakes in the same instant: this cheater can't (its steps are at least 200 ms apart), but a person could. Requiring the real order to trade was tried first, and it threw away most of the real catches.
 
 ```bash
 ./mvnw -DskipTests package                                        # the lab runs the packaged app
