@@ -2,7 +2,35 @@
 
 ## Local setup
 
-Use JDK 21, Node 22, and a running Docker engine. The [README](README.md) covers the packaged app and split backend/frontend development.
+You'll need **JDK 21**, **Node 22** and Docker. Maven comes with the wrapper, and `.nvmrc` pins the Node version.
+
+```bash
+# Backend (Spring Boot starts the Compose database for you)
+./mvnw spring-boot:run
+
+# Frontend, in another terminal
+cd frontend
+npm ci
+npm run dev
+```
+
+On Windows, use `.\mvnw.cmd`. Vite proxies REST and WebSocket traffic to port 8080. Stop the packaged app container before running the backend locally.
+
+### Running the tests
+
+```bash
+./mvnw verify                          # backend, against real Postgres
+cd frontend
+npm ci
+npm run format:check
+npm run build
+npx playwright install chromium
+npm test                               # browser tests, against the running app
+```
+
+Browser tests expect the full app at `http://127.0.0.1:8080`; set `E2E_BASE_URL` to point them elsewhere. They create throwaway accounts, so use a disposable database if you care about a clean practice environment.
+
+After every integration test, the ledger audit checks that the books still balance and that the event log agrees with them, so any test that moves money also tests that none went missing. The tests cover the order event log, user-to-user and partial fills, price-time and house priority, self-trade refusal, concurrent trades between the same accounts on two symbols, scheduled limit fills, double-spend and fill/cancel races, idempotent retries, stale quotes, migrations, P&L, navigation, account persistence, responsive layouts, and WebSocket delivery across two tabs. CI runs on every pull request and on main.
 
 Use a small branch with a clear purpose. Keep changes and commit messages focused on the behavior they change. Do not include generated bundles, dependencies, browser traces, credentials, or local environment files.
 
